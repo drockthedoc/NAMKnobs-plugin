@@ -24,9 +24,18 @@ jobs:
           cmake --build ci/build --config Release -j
         shell: bash
 
-      - name: Assert bundled parametric model honours the [audio ; K controls] contract
+      - name: Assert every bundled model's every knob is individually wired and effective
         run: |
-          ci/build/verify_parametric ci/models/rat_parametric.nam
+          set -e
+          shopt -s nullglob
+          count=0
+          for m in models/NAMKnobs_*.nam; do
+            echo "--- $m ---"
+            ci/build/verify_parametric "$m"
+            count=$((count+1))
+          done
+          if [ "$count" -eq 0 ]; then echo "No bundled models found to verify"; exit 1; fi
+          echo "Verified $count bundled models."
         shell: bash
 
   build:

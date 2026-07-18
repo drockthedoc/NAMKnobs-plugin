@@ -20,6 +20,7 @@ file(GLOB NAM_SOURCES "${CORE}/NAM/*.cpp" "${CORE}/NAM/*/*.cpp")
 add_executable(verify_parametric verify_parametric.cpp ${NAM_SOURCES})
 target_include_directories(verify_parametric PRIVATE
   "${CORE}"
+  "${CORE}/Dependencies"
   "${CORE}/Dependencies/eigen"
   "${CORE}/Dependencies/nlohmann")
 
