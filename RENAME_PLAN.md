@@ -1,12 +1,20 @@
-# Full bundle rename plan (NeuralAmpModeler → NAMKnobs on disk)
+# Optional: source-level bundle rename (NeuralAmpModeler → NAMKnobs in the project files)
 
-## What's already done (config.h, shipped)
-The plugin's **identity** is already NAMKnobs: `PLUG_NAME "NAMKnobs"`, unique `PLUG_UNIQUE_ID 'NKb1'` /
-`PLUG_MFR_ID 'NKnb'`. In a DAW it shows as **NAMKnobs** and registers as a distinct plugin from stock NAM.
+## Coexistence is already DONE (shipped, CI-green)
+NAMKnobs already coexists with stock NAM on every axis that matters to a user:
+- **Identity** (`config.h`): `PLUG_NAME "NAMKnobs"`, unique `PLUG_UNIQUE_ID 'NKb1'` / `PLUG_MFR_ID 'NKnb'`.
+- **On-disk filename**: the CI **post-build rename** step ships the bundles as `NAMKnobs.vst3` / `.component` /
+  `.app` (and `NAMKnobs.vst3` on Windows) — pluginval-validated on both OSes. See `.github/workflows/build-native.yml`.
+- **macOS ObjC prefix**: `OBJC_PREFIX`/`SWELL_APP_PREFIX` = `vNAMKnobs`, so both can be loaded in one host.
 
-## What's left (needs a local mac + Windows build to iterate — do NOT do this blind on CI)
-The bundle **filename** is still `NeuralAmpModeler.vst3` / `.component`, driven by `BUNDLE_NAME` and the project
-files. So installing to a shared plugin folder overwrites stock NAM's file. Fixing that = the on-disk rename below.
+So installing NAMKnobs does **not** overwrite or clash with a stock NAM install. **You do not need this plan** for
+coexistence.
+
+## What this plan is for (optional, cosmetic)
+The *build machinery* still uses `BUNDLE_NAME "NeuralAmpModeler"` and project files named `NeuralAmpModeler-*`;
+the CI post-build step renames the OUTPUT. If you'd rather the project itself produce `NAMKnobs.*` directly (no
+post-build step), do the source-level rename below — best on a **local mac + Windows build** (do NOT iterate it
+blind on CI; it touches 200+ project-file references). This is polish, not a functional requirement.
 
 ### Why it's risky to do blind
 The token `NeuralAmpModeler` is overloaded. It is simultaneously:
