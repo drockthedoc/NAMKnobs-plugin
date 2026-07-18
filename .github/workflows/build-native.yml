@@ -217,10 +217,9 @@ jobs:
           unzip *-${{matrix.artifact_ext}}.zip
         shell: bash
 
-      # pluginval's "Open plugin (warm)" test is intermittently crash-flaky on the CI runners (a known issue with
-      # the NAM plugin lineage, unrelated to plugin logic -- it reproduces without any model loaded). Retry a few
-      # times: a genuine defect fails every attempt, a flaky crash passes within a couple. pluginval is downloaded
-      # from latest_release, so this also absorbs churn in that moving target.
+      # Validation is pinned to pluginval v1.0.4 (the workflow inherited the deceptive "latest_release" tag, which
+      # is actually a stale 2020 build that flaky-crashes on warm-open). Run at MAX strictness (--strictness-level
+      # 10) for the most rigorous checks; the 3x retry stays as belt-and-suspenders against transient runner hiccups.
       - name: Pluginval (macOS)
         if: matrix.os == 'macos-latest'
         run: |
@@ -233,7 +232,7 @@ jobs:
           echo "using pluginval at: $PV"; "$PV" --version || true
           mkdir -p ~/Library/Audio/Plug-Ins/Components
           mv NAMKnobs.component ~/Library/Audio/Plug-Ins/Components
-          validate() { "$PV" --skip-gui-tests --validate-in-process --output-dir "./bin" --validate "$1"; }
+          validate() { "$PV" --strictness-level 10 --skip-gui-tests --validate-in-process --output-dir "./bin" --validate "$1"; }
           retry() { for i in 1 2 3; do echo "== $2 attempt $i =="; validate "$1" && return 0; echo "attempt $i failed; retrying"; sleep 3; done; return 1; }
           retry "NAMKnobs.vst3" "VST3" || exit 1
           pgrep -x AudioComponentRegistrar >/dev/null && killall -9 AudioComponentRegistrar || true
@@ -251,7 +250,7 @@ jobs:
           ok=0
           for i in 1 2 3; do
             echo "== pluginval attempt $i =="
-            ./pluginval.exe --skip-gui-tests --validate-in-process --output-dir "./bin" --validate NAMKnobs.vst3 && { ok=1; break; }
+            ./pluginval.exe --strictness-level 10 --skip-gui-tests --validate-in-process --output-dir "./bin" --validate NAMKnobs.vst3 && { ok=1; break; }
             echo "attempt $i failed (likely the flaky warm-open crash); retrying"
             sleep 3
           done
