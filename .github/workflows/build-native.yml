@@ -129,6 +129,45 @@ jobs:
         ls -la
       shell: bash
 
+    # NAMKnobs: best-effort GUI screenshot so the dynamic-knob layout isn't a blind spot. Launches the standalone
+    # app with NAMKNOBS_SCREENSHOT_MODEL so it shows a pedal's knobs, then screencaptures. Never fails the build.
+    - name: GUI screenshots (macOS, best-effort)
+      if: matrix.os == 'macOS-latest'
+      continue-on-error: true
+      run: |
+        set +e
+        OUT="$PWD/${{env.PROJECT_NAME}}/build-mac/out"
+        SHOTS="$PWD/shots"; mkdir -p "$SHOTS"
+        cd "$OUT"; rm -rf _shot; mkdir _shot; (cd _shot && unzip -q ../NAMKnobs-mac.zip)
+        APP="$OUT/_shot/NAMKnobs.app/Contents/MacOS/NAMKnobs"
+        chmod +x "$APP" 2>/dev/null
+        shoot() {
+          local model="$1" name="$2"
+          echo "== $name : $model =="
+          NAMKNOBS_SCREENSHOT_MODEL="$model" "$APP" >"/tmp/$name.log" 2>&1 &
+          local pid=$!
+          sleep 14
+          screencapture -x "$SHOTS/$name.png" 2>&1 || echo "screencapture failed for $name"
+          kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+          sleep 2
+          echo "--- $name app log ---"; tail -20 "/tmp/$name.log" 2>/dev/null
+        }
+        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_RAT.nam" "rat_3knobs"
+        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_Compressor.nam" "compressor_4knobs"
+        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_FuzzFace.nam" "fuzz_2knobs"
+        rm -rf "$OUT/_shot"
+        ls -la "$SHOTS" || true
+      shell: bash
+
+    - name: Upload screenshots (macOS, best-effort)
+      if: matrix.os == 'macOS-latest'
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: gui-screenshots
+        path: shots/
+        if-no-files-found: ignore
+
     - name: Rename bundle to NAMKnobs (Windows)
       if: matrix.os == 'windows-latest'
       run: |

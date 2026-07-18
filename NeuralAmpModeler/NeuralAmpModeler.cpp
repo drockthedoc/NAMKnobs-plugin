@@ -577,6 +577,46 @@ void NeuralAmpModeler::OnUIOpen()
   {
     _UpdateControlsFromModel();
   }
+
+  // NAMKnobs: CI screenshot affordance. If NAMKNOBS_SCREENSHOT_MODEL points at a .nam and no model is loaded, drive
+  // the knob arranger from that model's metadata so the standalone app shows the dynamic knob layout for a
+  // screencapture. Harmless in normal use (the env var is never set); it only touches the UI, not the DSP.
+  if (mModel == nullptr && !mModelControlsMsg.GetLength())
+  {
+    if (const char* shotModel = std::getenv("NAMKNOBS_SCREENSHOT_MODEL"))
+    {
+      try
+      {
+        std::ifstream f(std::filesystem::u8path(shotModel));
+        if (f.good())
+        {
+          nlohmann::json j;
+          f >> j;
+          const auto& md = j["metadata"];
+          std::vector<std::string> names;
+          if (md.contains("controls") && md["controls"].is_array())
+            for (auto& c : md["controls"])
+              if (c.is_string())
+                names.push_back(c.get<std::string>());
+          if (md.contains("level_control") && md["level_control"].is_object())
+          {
+            std::string ln = md["level_control"].value("name", std::string("Level"));
+            if (!ln.empty())
+              ln[0] = (char)std::toupper((unsigned char)ln[0]);
+            names.push_back(ln);
+          }
+          const int displayed = std::min((int)names.size(), kNumModelKnobs);
+          std::string msg = std::to_string(displayed);
+          for (int k = 0; k < displayed; ++k)
+            msg += "\n" + names[(size_t)k];
+          SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
+        }
+      }
+      catch (...)
+      {
+      }
+    }
+  }
 }
 
 void NeuralAmpModeler::OnParamChange(int paramIdx)
