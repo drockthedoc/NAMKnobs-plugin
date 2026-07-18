@@ -357,7 +357,37 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   if (mModel != nullptr)
   {
-    mModel->process(triggerOutput, mOutputPointers, nFrames);
+    const int namInChans = mModel->NumInputChannels();
+    if (namInChans > 1)
+    {
+      // NAMKnobs parametric pedal: feed [audio ; K knob channels]. Knob values come from plugin params
+      // (normalized 0..1), held constant over the block; channel 0 is the (gated) audio. (48k pass-through in
+      // ResamplingNAM preserves the extra channels; non-48k resampling of knob channels is a known v1 caveat.)
+      const int K = namInChans - 1;
+      if ((int)mKnobArray.size() < K)
+        mKnobArray.resize(K);
+      for (int k = 0; k < K; ++k)
+        if (mKnobArray[k].size() < numFrames)
+          mKnobArray[k].resize(numFrames);
+      mNAMInputPointers.resize((size_t)namInChans);
+      mNAMInputPointers[0] = triggerOutput[0];
+      // v1: first up to 3 knobs from the Bass/Middle/Treble params (0..10 -> 0..1); extras default to 0.5.
+      // v2 will add dedicated per-model knob params relabeled from the .nam metadata.
+      static const int knobParam[3] = {kToneBass, kToneMid, kToneTreble};
+      for (int k = 0; k < K; ++k)
+      {
+        double v = (k < 3) ? (GetParam(knobParam[k])->Value() / 10.0) : 0.5;
+        v = v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
+        for (size_t i = 0; i < numFrames; ++i)
+          mKnobArray[k][i] = (iplug::sample)v;
+        mNAMInputPointers[(size_t)(1 + k)] = mKnobArray[k].data();
+      }
+      mModel->process(mNAMInputPointers.data(), mOutputPointers, nFrames);
+    }
+    else
+    {
+      mModel->process(triggerOutput, mOutputPointers, nFrames);
+    }
   }
   else
   {

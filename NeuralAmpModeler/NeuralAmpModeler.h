@@ -286,6 +286,12 @@ private:
   iplug::sample** mInputPointers = nullptr;
   iplug::sample** mOutputPointers = nullptr;
 
+  // NAMKnobs: parametric-pedal knob channels. A parametric .nam declares in_channels = 1+K; we feed the model
+  // [audio ; K knob channels] where each knob channel is a plugin param value (0..1) held constant per block.
+  // Empty/unused for a plain mono NAM amp (K==0), which keeps stock behaviour.
+  std::vector<std::vector<iplug::sample>> mKnobArray;
+  std::vector<iplug::sample*> mNAMInputPointers;
+
   // Input and output gain
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
