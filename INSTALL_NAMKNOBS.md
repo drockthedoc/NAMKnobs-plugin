@@ -46,9 +46,10 @@ Guitar → NAMKnobs (RAT) → NAMKnobs (Tube Screamer) → NAM (amp) → cab/IR
 
 ## Notes / current limits
 
-- The plugin binary is still named `NeuralAmpModeler` (same as stock NAM) and shares its plugin ID, so installing
-  it **replaces / conflicts with** a stock NAM install. Use a dedicated plugin folder or a test DAW if you want
-  both. A proper rename + unique ID is a planned follow-up.
+- In a DAW this shows up as **NAMKnobs** with its own unique plugin ID, so hosts treat it as a distinct plugin
+  from stock NAM. **However**, the bundle *filename* on disk is still `NeuralAmpModeler.vst3` / `.component`, so
+  installing it to a shared plugin folder overwrites stock NAM's file. Until the on-disk rename lands
+  (see `RENAME_PLAN.md`), use a dedicated plugin folder if you want to keep both.
 - Up to 4 knobs per model are shown (our largest, the Compressor, has exactly 4). All four Compressor knobs work.
 - Works at any host sample rate (44.1/48/88.2/96 kHz): audio is resampled to the model rate and the knob controls
   are injected at model rate, so they're never dropped.

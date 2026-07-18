@@ -1,12 +1,16 @@
-#define PLUG_NAME "NeuralAmpModeler"
-#define PLUG_MFR "Steven Atkinson"
+// NAMKnobs: distinct plugin IDENTITY (DAW-visible name + unique VST3/AU IDs) so hosts treat it as its own plugin
+// rather than stock NAM. Build-path macros (BUNDLE_NAME, PLUG_CLASS_NAME, BUNDLE_MFR) are intentionally left as
+// "NeuralAmpModeler" so the project/build machinery is unchanged; the full bundle-filename rename (to also avoid
+// the on-disk file collision with stock NAM) is documented in RENAME_PLAN.md.
+#define PLUG_NAME "NAMKnobs"
+#define PLUG_MFR "NAMKnobs"
 #define PLUG_VERSION_HEX 0x0000070f
 #define PLUG_VERSION_STR "0.7.15"
-#define PLUG_UNIQUE_ID '1YEo'
-#define PLUG_MFR_ID 'SDAa'
-#define PLUG_URL_STR "https://github.com/sdatkinson/NeuralAmpModelerPlugin"
+#define PLUG_UNIQUE_ID 'NKb1'
+#define PLUG_MFR_ID 'NKnb'
+#define PLUG_URL_STR "https://github.com/drockthedoc/NAMKnobs-plugin"
 #define PLUG_EMAIL_STR "spam@me.com"
-#define PLUG_COPYRIGHT_STR "Copyright 2022 Steven Atkinson"
+#define PLUG_COPYRIGHT_STR "Based on Neural Amp Modeler (c) Steven Atkinson; NAMKnobs parametric fork"
 #define PLUG_CLASS_NAME NeuralAmpModeler
 #define BUNDLE_NAME "NeuralAmpModeler"
 #define BUNDLE_MFR "StevenAtkinson"
