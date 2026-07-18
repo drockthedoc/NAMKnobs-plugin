@@ -1,7 +1,7 @@
-// NAMKnobs: distinct plugin IDENTITY (DAW-visible name + unique VST3/AU IDs) so hosts treat it as its own plugin
-// rather than stock NAM. Build-path macros (BUNDLE_NAME, PLUG_CLASS_NAME, BUNDLE_MFR) are intentionally left as
-// "NeuralAmpModeler" so the project/build machinery is unchanged; the full bundle-filename rename (to also avoid
-// the on-disk file collision with stock NAM) is documented in RENAME_PLAN.md.
+// NAMKnobs: a distinct plugin identity (DAW-visible name + unique VST3/AU 4-char codes) so hosts treat it as its
+// own plugin, not stock NAM. Only identity/metadata is changed; the on-disk bundle-file rename is in RENAME_PLAN.md.
+// IMPORTANT: keep macro identifiers OUT of these comment lines -- makedist-mac.sh greps this file by macro name to
+// read the version and the bundle name, and a comment mentioning one would corrupt that parse.
 #define PLUG_NAME "NAMKnobs"
 #define PLUG_MFR "NAMKnobs"
 #define PLUG_VERSION_HEX 0x0000070f
