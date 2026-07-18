@@ -897,9 +897,6 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       slimmable->SetSlimmableSize(GetParam(kSlim)->Value());
     }
     const int numControls = temp->NumControls(); // NAMKnobs: K knob controls (0 = plain amp)
-    mStagedModel = std::move(temp);
-    mNAMPath = modelPath;
-    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
 
     // NAMKnobs: read the model's control names from metadata.controls (best-effort) plus the optional deterministic
     // level_control (a Volume/Level/Output knob applied as external gain, out = net_out * level/reference, exact mute
@@ -961,6 +958,12 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     mNumModelControls = numControls;
     mStagedHasLevel = hasLevel && (numControls < kNumModelKnobs); // only if there's a slot for it
     mStagedLevelReference = levelReference;
+    // Publish the staged model LAST. The audio thread's _ApplyDSPStaging gates on mStagedModel != nullptr and then
+    // copies mStagedHasLevel/mStagedLevelReference; those companion writes must therefore happen BEFORE this
+    // handover, otherwise a model can go live with stale level metadata from the previous load (cross-thread race).
+    mStagedModel = std::move(temp);
+    mNAMPath = modelPath;
+    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
     SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
   }
   catch (std::runtime_error& e)
