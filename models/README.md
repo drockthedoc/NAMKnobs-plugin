@@ -11,13 +11,17 @@ circuits and are not affiliated with or endorsed by the original manufacturers.
 
 | Pedal | File | Knobs (in order) |
 |---|---|---|
-| RAT | `NAMKnobs_RAT.nam` | Distortion, Filter |
-| Tube Screamer | `NAMKnobs_TubeScreamer.nam` | Drive, Tone |
-| Big Muff (Green Russian) | `NAMKnobs_BigMuff_GreenRussian.nam` | Sustain, Tone |
-| MXR Distortion+ | `NAMKnobs_MXR_DistortionPlus.nam` | Distortion |
-| Boss DS-1 | `NAMKnobs_BossDS1.nam` | Dist, Tone |
-| Fuzz Face | `NAMKnobs_FuzzFace.nam` | Fuzz |
+| RAT | `NAMKnobs_RAT.nam` | Distortion, Filter, Volume |
+| Tube Screamer | `NAMKnobs_TubeScreamer.nam` | Drive, Tone, Level |
+| Big Muff (Green Russian) | `NAMKnobs_BigMuff_GreenRussian.nam` | Sustain, Tone, Volume |
+| MXR Distortion+ | `NAMKnobs_MXR_DistortionPlus.nam` | Distortion, Output |
+| Boss DS-1 | `NAMKnobs_BossDS1.nam` | Dist, Tone, Level |
+| Fuzz Face | `NAMKnobs_FuzzFace.nam` | Fuzz, Volume |
 | Compressor | `NAMKnobs_Compressor.nam` | Threshold, Ratio, Attack, Release |
+
+The trailing **Volume / Level / Output** knob is a deterministic output-gain control (exact silence at 0, the
+pedal's natural level around noon) — applied as a clean external gain, not fed to the neural net. The Compressor
+has no level knob.
 
 ## How the knobs work
 

@@ -417,6 +417,14 @@ private:
   WDL_String mModelControlsMsg;
   int mNumModelControls = 0;
 
+  // NAMKnobs: deterministic Level/Volume knob (external output gain: out = net_out * level/reference, exact mute at
+  // 0). mHasLevel/mLevelReference are the live values (read on the audio thread); mStaged* are set when a model is
+  // parsed and copied to the live values at the model swap in _ApplyDSPStaging.
+  bool mHasLevel = false;
+  double mLevelReference = 1.0;
+  bool mStagedHasLevel = false;
+  double mStagedLevelReference = 1.0;
+
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};

@@ -1,4 +1,5 @@
 #include <algorithm> // std::clamp, std::min
+#include <cctype> // std::toupper
 #include <cmath> // pow
 #include <filesystem>
 #include <fstream> // std::ifstream (read model metadata for knob labels)
@@ -412,6 +413,18 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     }
     // Always feed mono audio; control injection happens inside ResamplingNAM.
     mModel->process(triggerOutput, mOutputPointers, nFrames);
+
+    // NAMKnobs: deterministic Level/Volume knob (out = net_out * level/reference; EXACT mute at 0). It's the knob
+    // just past the K net controls; applied here as an external output gain (never fed to the net).
+    if (mHasLevel && K < kNumModelKnobs)
+    {
+      double lvl = GetParam(kModelKnob0 + K)->Value() / 10.0; // 0..1
+      lvl = lvl < 0.0 ? 0.0 : (lvl > 1.0 ? 1.0 : lvl);
+      const double gain = (lvl <= 0.0) ? 0.0 : (mLevelReference > 0.0 ? lvl / mLevelReference : lvl);
+      for (int c = 0; c < numChannelsInternal; ++c)
+        for (int i = 0; i < numFrames; ++i)
+          mOutputPointers[c][i] *= (sample)gain;
+    }
   }
   else
   {
@@ -667,6 +680,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mNAMPath.Set("");
     mShouldRemoveModel = false;
     mModelCleared = true;
+    mHasLevel = false; // NAMKnobs: no model -> no level knob
     _UpdateLatency();
     _SetInputGain();
     _SetOutputGain();
@@ -683,6 +697,10 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mModel = std::move(mStagedModel);
     mStagedModel = nullptr;
     mNewModelLoadedInDSP = true;
+    // NAMKnobs: apply the staged level-control state alongside the model swap (audio thread), so the output-gain
+    // knob matches the model that's now live.
+    mHasLevel = mStagedHasLevel;
+    mLevelReference = mStagedLevelReference;
     _UpdateLatency();
     _SetInputGain();
     _SetOutputGain();
@@ -840,9 +858,14 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     mNAMPath = modelPath;
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
 
-    // NAMKnobs: read the model's control names (best-effort) from metadata.controls and tell the UI to show exactly
-    // K knobs with those labels. Cached in mModelControlsMsg so OnUIOpen can restore them if the editor reopens.
+    // NAMKnobs: read the model's control names from metadata.controls (best-effort) plus the optional deterministic
+    // level_control (a Volume/Level/Output knob applied as external gain, out = net_out * level/reference, exact mute
+    // at 0). The UI shows the K net controls followed by the level knob (if any). Cached in mModelControlsMsg so
+    // OnUIOpen can restore it. mStagedHasLevel/mStagedLevelReference are applied when the model goes live (staging).
     std::vector<std::string> controlNames;
+    std::string levelName;
+    bool hasLevel = false;
+    double levelReference = 1.0;
     try
     {
       std::ifstream f(dspPath);
@@ -850,28 +873,51 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       {
         nlohmann::json j;
         f >> j;
-        if (j.contains("metadata") && j["metadata"].contains("controls") && j["metadata"]["controls"].is_array())
+        const auto& md = j["metadata"];
+        if (j.contains("metadata") && md.contains("controls") && md["controls"].is_array())
         {
-          for (auto& c : j["metadata"]["controls"])
+          for (auto& c : md["controls"])
             if (c.is_string())
               controlNames.push_back(c.get<std::string>());
+        }
+        if (j.contains("metadata") && md.contains("level_control") && md["level_control"].is_object())
+        {
+          const auto& lc = md["level_control"];
+          hasLevel = true;
+          if (lc.contains("name") && lc["name"].is_string())
+            levelName = lc["name"].get<std::string>();
+          if (lc.contains("reference") && lc["reference"].is_number())
+            levelReference = lc["reference"].get<double>();
+          if (levelName.empty())
+            levelName = "Level";
+          // capitalize first letter for display (e.g. "volume" -> "Volume")
+          if (!levelName.empty())
+            levelName[0] = (char)std::toupper((unsigned char)levelName[0]);
         }
       }
     }
     catch (...)
     {
       controlNames.clear();
+      hasLevel = false;
     }
-    std::string msg = std::to_string(numControls);
-    for (int k = 0; k < numControls; ++k)
+    // Guard the display slot count: net controls + optional level, capped at the available knob slots.
+    const int displayed = std::min(numControls + (hasLevel ? 1 : 0), kNumModelKnobs);
+    std::string msg = std::to_string(displayed);
+    for (int k = 0; k < displayed; ++k)
     {
       msg += "\n";
-      msg += (k < (int)controlNames.size() && !controlNames[(size_t)k].empty())
-               ? controlNames[(size_t)k]
-               : (std::string("Knob ") + std::to_string(k + 1));
+      if (k < numControls)
+        msg += (k < (int)controlNames.size() && !controlNames[(size_t)k].empty())
+                 ? controlNames[(size_t)k]
+                 : (std::string("Knob ") + std::to_string(k + 1));
+      else
+        msg += levelName; // the trailing level knob
     }
     mModelControlsMsg.Set(msg.c_str());
     mNumModelControls = numControls;
+    mStagedHasLevel = hasLevel && (numControls < kNumModelKnobs); // only if there's a slot for it
+    mStagedLevelReference = levelReference;
     SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
   }
   catch (std::runtime_error& e)
