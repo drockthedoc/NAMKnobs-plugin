@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cctype> // std::toupper
 #include <cmath> // std::round
 #include <cstdio> // FILE, fclose
 #include <cstdlib> // atoi
@@ -178,9 +179,11 @@ public:
         const IRECT cell = mKnobsArea.GetGridCell(0, k, 1, shown).GetPadded(-2.0f);
         knob->SetTargetAndDrawRECTs(cell);
         const int nameIdx = 1 + k; // lines[0] holds K
-        const std::string label = (nameIdx < (int)lines.size() && !lines[(size_t)nameIdx].empty())
-                                     ? lines[(size_t)nameIdx]
-                                     : (std::string("Knob ") + std::to_string(k + 1));
+        std::string label = (nameIdx < (int)lines.size() && !lines[(size_t)nameIdx].empty())
+                              ? lines[(size_t)nameIdx]
+                              : (std::string("Knob ") + std::to_string(k + 1));
+        if (!label.empty()) // Title-case the first letter so labels read uniformly (e.g. "distortion" -> "Distortion")
+          label[0] = (char)std::toupper((unsigned char)label[0]);
         if (auto* vk = knob->As<IVKnobControl>())
           vk->SetLabelStr(label.c_str());
         knob->Hide(false);
