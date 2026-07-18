@@ -121,9 +121,17 @@ public:
       for (int k = 0; k < mNumControls; ++k)
       {
         NAM_SAMPLE* ch = mControlChannels[(size_t)k].data();
-        const NAM_SAMPLE v = mControlValues[(size_t)k];
+        const NAM_SAMPLE tgt = mControlValues[(size_t)k];
+        // Per-sample one-pole smoothing toward the target so host automation / knob turns become a click-free
+        // glide (not a block-edge step whose timing depends on host buffer size). State persists across blocks.
+        NAM_SAMPLE cur = mControlSmoothed[(size_t)k];
+        const NAM_SAMPLE a = mControlAlpha;
         for (int i = 0; i < numFrames; ++i)
-          ch[i] = v;
+        {
+          cur += a * (tgt - cur);
+          ch[i] = cur;
+        }
+        mControlSmoothed[(size_t)k] = cur;
         mMultiIn[(size_t)(1 + k)] = ch;
       }
       mEncapsulated->process(mMultiIn.data(), output, numFrames);
@@ -208,6 +216,16 @@ public:
       mMultiIn.assign((size_t)(mNumControls + 1), nullptr);
       if ((int)mControlValues.size() != mNumControls)
         mControlValues.assign((size_t)mNumControls, (NAM_SAMPLE)0.5);
+      // Smoother state: snap to the current targets on (re)configuration so there's no startup glide, and
+      // precompute the one-pole coefficient from a fixed time constant at the model's internal rate.
+      if ((int)mControlSmoothed.size() != mNumControls)
+        mControlSmoothed.assign((size_t)mNumControls, (NAM_SAMPLE)0.5);
+      for (int k = 0; k < mNumControls; ++k)
+        mControlSmoothed[(size_t)k] = mControlValues[(size_t)k];
+      const double modelRate = GetEncapsulatedSampleRate() > 0.0 ? GetEncapsulatedSampleRate() : 48000.0;
+      const double smoothMs = 5.0; // v1 fixed; per-slot smoothingMs comes with the dedicated knob params
+      const double tau = smoothMs * 0.001 * modelRate;
+      mControlAlpha = (NAM_SAMPLE)(tau > 0.0 ? (1.0 - std::exp(-1.0 / tau)) : 1.0);
     }
   };
 
@@ -238,7 +256,9 @@ private:
   // (0..1) value of each control; mControlChannels are per-block constant-fill scratch buffers; mMultiIn is the
   // [audio ; control...] pointer array handed to the encapsulated model. All sized in Reset (never on audio thread).
   int mNumControls = 0;
-  std::vector<NAM_SAMPLE> mControlValues;
+  std::vector<NAM_SAMPLE> mControlValues; // per-control target (0..1), written by SetControls
+  std::vector<NAM_SAMPLE> mControlSmoothed; // per-control smoother state (one-pole toward target)
+  NAM_SAMPLE mControlAlpha = (NAM_SAMPLE)1; // one-pole coefficient (1 = no smoothing); set in Reset
   std::vector<std::vector<NAM_SAMPLE>> mControlChannels;
   std::vector<NAM_SAMPLE*> mMultiIn;
 };
