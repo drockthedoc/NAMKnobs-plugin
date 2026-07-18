@@ -155,8 +155,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto contentArea = mainArea.GetPadded(-10);
     const auto titleHeight = 50.0f;
     const auto titleArea = contentArea.GetFromTop(titleHeight);
-    // NAMKnobs: little stylized-pedal icon in the top-left corner (title is centered, so this corner is free).
-    const auto pedalIconArea = IRECT(contentArea.L + 2.f, contentArea.T + 2.f, contentArea.L + 46.f, contentArea.T + 66.f);
+    // NAMKnobs: little stylized-pedal icon tucked into the bottom-right blank space.
+    const auto pedalIconArea = IRECT(contentArea.R - 52.f, contentArea.B - 72.f, contentArea.R - 4.f, contentArea.B - 6.f);
 
     // Areas for knobs
     const auto knobsPad = 20.0f;
