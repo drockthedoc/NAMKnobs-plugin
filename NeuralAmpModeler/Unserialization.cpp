@@ -54,8 +54,13 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   OnParamReset(iplug::EParamSource::kPresetRecall);
   LEAVE_PARAMS_MUTEX
 
-  mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
-  mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
+  // NAMKnobs: guard against a config with a missing/null NAMPath or IRPath. nlohmann's operator[] on a non-const
+  // json inserts null for an absent key, and casting null -> std::string throws type_error.302 -- which crashed
+  // pluginval's "Plugin state" test (and would crash a host restoring a state saved with no model/IR loaded).
+  if (config.contains("NAMPath") && config["NAMPath"].is_string())
+    mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
+  if (config.contains("IRPath") && config["IRPath"].is_string())
+    mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
 
   if (mNAMPath.GetLength())
   {

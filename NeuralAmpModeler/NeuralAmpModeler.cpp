@@ -602,7 +602,8 @@ void NeuralAmpModeler::OnUIOpen()
                 names.push_back(c.get<std::string>());
           if (md.contains("level_control") && md["level_control"].is_object())
           {
-            std::string ln = md["level_control"].value("name", std::string("Level"));
+            const auto& lc = md["level_control"];
+            std::string ln = (lc.contains("name") && lc["name"].is_string()) ? lc["name"].get<std::string>() : "Level";
             if (!ln.empty())
               ln[0] = (char)std::toupper((unsigned char)ln[0]);
             names.push_back(ln);
