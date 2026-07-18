@@ -221,6 +221,66 @@ private:
   IRECT mKnobsArea;
 };
 
+// NAMKnobs: a little stylized stompbox drawn with primitives (no external art -> no licensing issue), tinted in
+// the loaded pedal's accent color with its short name, footswitch, LED, and two knob dots. Shown only when a
+// parametric pedal is loaded. Driven by kMsgTagPedalIcon ("shortName\n#RRGGBB"; empty payload hides it).
+class PedalIconControl : public IControl
+{
+public:
+  PedalIconControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    mIgnoreMouse = true;
+    Hide(true);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mName.empty())
+      return;
+    const IRECT body = mRECT.GetPadded(-1.5f);
+    // enclosure
+    g.FillRoundRect(IColor(255, 38, 38, 42), body, 5.f);
+    g.DrawRoundRect(mAccent, body, 5.f, &mBlend, 1.5f);
+    // two knob dots up top
+    const IRECT top = body.GetFromTop(body.H() * 0.22f);
+    g.FillCircle(mAccent, top.MW() - body.W() * 0.16f, top.MH() + 2.f, 2.6f);
+    g.FillCircle(mAccent, top.MW() + body.W() * 0.16f, top.MH() + 2.f, 2.6f);
+    // LED
+    g.FillCircle(mAccent, body.R - 6.f, body.T + 6.f, 2.2f);
+    // name plate in the middle
+    IRECT nameR = body.GetMidVPadded(body.H() * 0.16f).GetHPadded(-2.f);
+    IText t(8.5f, COLOR_WHITE, nullptr, EAlign::Center, EVAlign::Middle);
+    g.DrawText(t, mName.c_str(), nameR);
+    // footswitch at the bottom
+    const IRECT bot = body.GetFromBottom(body.H() * 0.30f);
+    g.FillCircle(IColor(255, 70, 70, 74), bot.MW(), bot.MH(), 7.f);
+    g.DrawCircle(mAccent, bot.MW(), bot.MH(), 7.f, &mBlend, 1.2f);
+  }
+
+  void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
+  {
+    if (msgTag != kMsgTagPedalIcon || pData == nullptr)
+      return;
+    std::string s(reinterpret_cast<const char*>(pData), dataSize > 0 ? (size_t)dataSize : 0u);
+    while (!s.empty() && s.back() == '\0')
+      s.pop_back();
+    const size_t nl = s.find('\n');
+    mName = (nl == std::string::npos) ? s : s.substr(0, nl);
+    std::string col = (nl == std::string::npos) ? std::string() : s.substr(nl + 1);
+    if (col.size() >= 7 && col[0] == '#')
+      mAccent = IColor::FromColorCode((int)strtol(col.substr(1, 6).c_str(), nullptr, 16));
+    else
+      mAccent = COLOR_WHITE;
+    Hide(mName.empty());
+    SetDirty(false);
+  }
+
+private:
+  std::string mName;
+  IColor mAccent = COLOR_WHITE;
+};
+
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
 {
 public:

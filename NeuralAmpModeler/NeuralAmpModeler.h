@@ -81,6 +81,7 @@ enum ECtrlTags
   kCtrlTagModelKnob2,
   kCtrlTagModelKnob3,
   kCtrlTagModelKnobArranger,
+  kCtrlTagPedalIcon,
   kNumCtrlTags
 };
 
@@ -97,6 +98,8 @@ enum EMsgTags
   // NAMKnobs: DSP -> UI, carries "K\nname0\nname1..." so the arranger can show/label exactly K knobs (K=0 -> amp
   // mode: show the analog EQ, hide the model knobs).
   kMsgTagModelControls,
+  // NAMKnobs: DSP -> UI, "shortName\n#RRGGBB" for the little stylized pedal icon (empty -> hide).
+  kMsgTagPedalIcon,
   kNumMsgTags
 };
 
@@ -415,6 +418,7 @@ private:
   // OnUIOpen can re-send it and restore the correct knob count/labels after the editor (re)opens with a model
   // already loaded. Number of live model controls the current model exposes (0 = plain amp).
   WDL_String mModelControlsMsg;
+  WDL_String mPedalIconMsg; // NAMKnobs: cached "shortName\n#color" for the pedal icon (re-sent on OnUIOpen)
   int mNumModelControls = 0;
 
   // NAMKnobs: deterministic Level/Volume knob (external output gain: out = net_out * level/reference, exact mute at

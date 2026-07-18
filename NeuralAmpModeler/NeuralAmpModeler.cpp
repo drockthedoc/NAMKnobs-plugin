@@ -155,6 +155,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto contentArea = mainArea.GetPadded(-10);
     const auto titleHeight = 50.0f;
     const auto titleArea = contentArea.GetFromTop(titleHeight);
+    // NAMKnobs: little stylized-pedal icon in the top-left corner (title is centered, so this corner is free).
+    const auto pedalIconArea = IRECT(contentArea.L + 2.f, contentArea.T + 2.f, contentArea.L + 46.f, contentArea.T + 66.f);
 
     // Areas for knobs
     const auto knobsPad = 20.0f;
@@ -313,6 +315,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         ->Hide(true);
     }
     pGraphics->AttachControl(new ModelKnobArrangerControl(modelKnobsArea), kCtrlTagModelKnobArranger);
+    pGraphics->AttachControl(new PedalIconControl(pedalIconArea), kCtrlTagPedalIcon);
 
     // The meters
     pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
@@ -567,6 +570,7 @@ void NeuralAmpModeler::OnUIOpen()
   if (mModelControlsMsg.GetLength())
     SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, mModelControlsMsg.GetLength() + 1,
                                mModelControlsMsg.Get());
+  SendControlMsgFromDelegate(kCtrlTagPedalIcon, kMsgTagPedalIcon, mPedalIconMsg.GetLength() + 1, mPedalIconMsg.Get());
 
   if (mIRPath.GetLength())
   {
@@ -618,6 +622,17 @@ void NeuralAmpModeler::OnUIOpen()
           for (int k = 0; k < displayed; ++k)
             msg += "\n" + names[(size_t)k];
           SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
+          // pedal icon
+          std::string shortName;
+          if (md.contains("short_name") && md["short_name"].is_string())
+            shortName = md["short_name"].get<std::string>();
+          else if (md.contains("pedal") && md["pedal"].is_string())
+            shortName = md["pedal"].get<std::string>();
+          if (displayed > 0 && !shortName.empty())
+          {
+            std::string iconMsg = shortName + "\n" + knobColor;
+            SendControlMsgFromDelegate(kCtrlTagPedalIcon, kMsgTagPedalIcon, (int)iconMsg.size() + 1, iconMsg.c_str());
+          }
         }
       }
       catch (...)
@@ -675,6 +690,8 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       mModelControlsMsg.Set("0");
       mNumModelControls = 0;
       SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, 2, "0");
+      mPedalIconMsg.Set("");
+      SendControlMsgFromDelegate(kCtrlTagPedalIcon, kMsgTagPedalIcon, 1, "");
       return true;
     case kMsgTagClearIR: mShouldRemoveIR = true; return true;
     case kMsgTagHighlightColor:
@@ -910,6 +927,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     std::vector<std::string> controlNames;
     std::string levelName;
     std::string knobColor; // NAMKnobs: per-pedal accent color for the model knobs (metadata.knob_color, "#RRGGBB")
+    std::string shortName; // NAMKnobs: short pedal name for the stylized pedal icon (metadata.short_name)
     bool hasLevel = false;
     double levelReference = 1.0;
     try
@@ -922,6 +940,10 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
         const auto& md = j["metadata"];
         if (md.contains("knob_color") && md["knob_color"].is_string())
           knobColor = md["knob_color"].get<std::string>();
+        if (md.contains("short_name") && md["short_name"].is_string())
+          shortName = md["short_name"].get<std::string>();
+        else if (md.contains("pedal") && md["pedal"].is_string())
+          shortName = md["pedal"].get<std::string>();
         if (j.contains("metadata") && md.contains("controls") && md["controls"].is_array())
         {
           for (auto& c : md["controls"])
@@ -976,6 +998,11 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     mNAMPath = modelPath;
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
     SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
+    // NAMKnobs: drive the little stylized pedal icon ("shortName\n#color"). Only for a parametric pedal (K>0);
+    // a plain amp sends an empty payload -> the icon hides. Cached for OnUIOpen.
+    std::string iconMsg = (numControls > 0 && !shortName.empty()) ? (shortName + "\n" + knobColor) : std::string();
+    mPedalIconMsg.Set(iconMsg.c_str());
+    SendControlMsgFromDelegate(kCtrlTagPedalIcon, kMsgTagPedalIcon, (int)iconMsg.size() + 1, iconMsg.c_str());
   }
   catch (std::runtime_error& e)
   {
