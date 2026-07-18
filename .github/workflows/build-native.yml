@@ -154,9 +154,9 @@ jobs:
         }
         # macOS pops a screen-recording permission dialog after the first capture, so capture the tightest layout
         # (the 4-knob compressor) first while the screen is clean; the others may show the dialog overlay.
-        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_RAT.nam" "1_rat_3knobs"
-        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_Compressor.nam" "2_compressor_4knobs"
-        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_FuzzFace.nam" "3_fuzz_2knobs"
+        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_FuzzFace.nam" "1_fuzz_round"
+        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_BossDS1.nam" "2_ds1_orange"
+        shoot "$GITHUB_WORKSPACE/models/NAMKnobs_RAT.nam" "3_rat_black"
         rm -rf "$OUT/_shot"
         ls -la "$SHOTS" || true
       shell: bash
