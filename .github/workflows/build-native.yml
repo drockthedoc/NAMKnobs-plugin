@@ -98,6 +98,53 @@ jobs:
         .\makedist-win.bat full zip
       shell: pwsh
 
+    # NAMKnobs: the build outputs bundles named "NeuralAmpModeler.*" (BUNDLE_NAME is kept so the build machinery is
+    # untouched). Rename the OUTPUT bundles to "NAMKnobs.*" here so the shipped files don't collide with a stock NAM
+    # install on disk. The plugin's internal identity (name + VST3/AU IDs) is already NAMKnobs via config.h.
+    - name: Rename bundles to NAMKnobs (macOS)
+      if: matrix.os == 'macOS-latest'
+      run: |
+        set -e
+        cd ${{env.PROJECT_NAME}}/build-mac/out
+        Z=$(ls *-mac.zip | grep -v dSYMs | head -1)
+        echo "renaming bundles in $Z"
+        work=_rename; rm -rf "$work"; mkdir "$work"
+        (cd "$work" && unzip -q ../"$Z")
+        for ext in vst3 component app; do
+          b="$work/NeuralAmpModeler.$ext"
+          if [ -d "$b" ]; then
+            nb="$work/NAMKnobs.$ext"
+            mv "$b" "$nb"
+            if [ -f "$nb/Contents/MacOS/NeuralAmpModeler" ]; then
+              mv "$nb/Contents/MacOS/NeuralAmpModeler" "$nb/Contents/MacOS/NAMKnobs"
+              /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable NAMKnobs" "$nb/Contents/Info.plist"
+            fi
+            /usr/libexec/PlistBuddy -c "Set :CFBundleName NAMKnobs" "$nb/Contents/Info.plist" || true
+            echo "  -> NAMKnobs.$ext"
+          fi
+        done
+        rm -f "$Z"
+        (cd "$work" && zip -qry ../"NAMKnobs-mac.zip" .)
+        rm -rf "$work"
+        ls -la
+      shell: bash
+
+    - name: Rename bundle to NAMKnobs (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd ${{env.PROJECT_NAME}}\build-win\out
+        $z = Get-ChildItem *-win.zip | Where-Object { $_.Name -notlike '*pdbs*' } | Select-Object -First 1
+        Write-Host "renaming bundle in $($z.Name)"
+        $work = "_rename"; Remove-Item $work -Recurse -Force -ErrorAction Ignore; New-Item -ItemType Directory $work | Out-Null
+        Expand-Archive $z.FullName -DestinationPath $work
+        if (Test-Path "$work\NeuralAmpModeler.vst3") { Rename-Item "$work\NeuralAmpModeler.vst3" "NAMKnobs.vst3" }
+        if (Test-Path "$work\NeuralAmpModeler_x64.exe") { Rename-Item "$work\NeuralAmpModeler_x64.exe" "NAMKnobs_x64.exe" }
+        Remove-Item $z.FullName
+        Compress-Archive -Path "$work\*" -DestinationPath "NAMKnobs-win.zip"
+        Remove-Item $work -Recurse -Force
+        Get-ChildItem
+      shell: pwsh
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
@@ -133,11 +180,11 @@ jobs:
         run: |
           curl -L "https://github.com/Tracktion/pluginval/releases/download/latest_release/pluginval_macOS.zip" -o pluginval.zip
           unzip pluginval
-          pluginval.app/Contents/MacOS/pluginval --skip-gui-tests --validate-in-process --output-dir "./bin" --validate ${{env.PROJECT_NAME}}.vst3 || exit 1
+          pluginval.app/Contents/MacOS/pluginval --skip-gui-tests --validate-in-process --output-dir "./bin" --validate NAMKnobs.vst3 || exit 1
           mkdir -p ~/Library/Audio/Plug-Ins/Components
-          mv ${{env.PROJECT_NAME}}.component ~/Library/Audio/Plug-Ins/Components
+          mv NAMKnobs.component ~/Library/Audio/Plug-Ins/Components
           pgrep -x AudioComponentRegistrar >/dev/null && killall -9 AudioComponentRegistrar; echo "killed AudioComponentRegistrar" || echo "AudioComponentRegistrar Process not found"
-          pluginval.app/Contents/MacOS/pluginval --skip-gui-tests --validate-in-process --output-dir "./bin" --validate ~/Library/Audio/Plug-Ins/Components/${{env.PROJECT_NAME}}.component || exit 1
+          pluginval.app/Contents/MacOS/pluginval --skip-gui-tests --validate-in-process --output-dir "./bin" --validate ~/Library/Audio/Plug-Ins/Components/NAMKnobs.component || exit 1
         shell: bash
 
       - name: Pluginval (Windows)
@@ -145,7 +192,7 @@ jobs:
         run: |
           powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/latest_release/pluginval_Windows.zip -OutFile pluginval.zip"
           powershell -Command "Expand-Archive pluginval.zip -DestinationPath ."
-          pluginval.exe --skip-gui-tests --validate-in-process --output-dir "./bin" --validate ${{env.PROJECT_NAME}}.vst3
+          pluginval.exe --skip-gui-tests --validate-in-process --output-dir "./bin" --validate NAMKnobs.vst3
           if %ERRORLEVEL% neq 0 exit /b 1
         shell: cmd
 
