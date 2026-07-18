@@ -6,9 +6,9 @@
 
 > **[⬇ Download the latest release](https://github.com/drockthedoc/NAMKnobs-plugin/releases/latest)** — VST3 + AU (macOS) / VST3 (Windows), plus 7 pedal models. See **[INSTALL_NAMKNOBS.md](INSTALL_NAMKNOBS.md)**.
 
-<p align="center"><img src="docs/namknobs-ui.png" alt="NAMKnobs UI with the Compressor model loaded — Threshold / Ratio / Attack / Release knobs" width="460"></p>
+<p align="center"><img src="docs/namknobs-ui.png" alt="NAMKnobs UI with the RAT model loaded — Distortion / Filter / Volume knobs" width="460"></p>
 
-*Above: the Compressor model loaded — the plugin shows that pedal's four knobs (Threshold / Ratio / Attack / Release). Load the RAT and you'd see Distortion / Filter / Volume instead. (Screenshot captured automatically in CI.)*
+*Above: the RAT model loaded — the plugin shows exactly that pedal's knobs (**Distortion / Filter / Volume**). Load the Compressor instead and you'd get Threshold / Ratio / Attack / Release; the amp EQ is hidden while a pedal is loaded. (Screenshot captured automatically in CI.)*
 
 ## What makes it different
 
