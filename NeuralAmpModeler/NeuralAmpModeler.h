@@ -47,8 +47,18 @@ enum EParams
   kInputCalibrationLevel,
   kOutputMode,
   kSlim,
+  // NAMKnobs: fixed pool of parametric-pedal knob params. The host always sees these (generic names); the UI
+  // shows exactly K of them, relabelled from the loaded model's control metadata, and hides the rest.
+  kModelKnob0,
+  kModelKnob1,
+  kModelKnob2,
+  kModelKnob3,
   kNumParams
 };
+
+// NAMKnobs: number of dynamic model-knob slots (max controls we display/drive). Our largest model is the 4-knob
+// compressor.
+constexpr int kNumModelKnobs = 4;
 
 const int numKnobs = 6;
 
@@ -65,6 +75,12 @@ enum ECtrlTags
   kCtrlTagSlimmableIcon,
   kCtrlTagSlimOverlayBackdrop,
   kCtrlTagSlimKnob,
+  // NAMKnobs: dynamic model-knob controls + the invisible arranger that shows/labels/hides them on model load.
+  kCtrlTagModelKnob0,
+  kCtrlTagModelKnob1,
+  kCtrlTagModelKnob2,
+  kCtrlTagModelKnob3,
+  kCtrlTagModelKnobArranger,
   kNumCtrlTags
 };
 
@@ -78,6 +94,9 @@ enum EMsgTags
   kMsgTagLoadFailed,
   kMsgTagLoadedModel,
   kMsgTagLoadedIR,
+  // NAMKnobs: DSP -> UI, carries "K\nname0\nname1..." so the arranger can show/label exactly K knobs (K=0 -> amp
+  // mode: show the analog EQ, hide the model knobs).
+  kMsgTagModelControls,
   kNumMsgTags
 };
 
@@ -391,6 +410,12 @@ private:
   WDL_String mNAMPath;
   // Path to IR (.wav file)
   WDL_String mIRPath;
+
+  // NAMKnobs: the most recent "K\nname0\nname1..." model-controls message (see kMsgTagModelControls). Cached so
+  // OnUIOpen can re-send it and restore the correct knob count/labels after the editor (re)opens with a model
+  // already loaded. Number of live model controls the current model exposes (0 = plain amp).
+  WDL_String mModelControlsMsg;
+  int mNumModelControls = 0;
 
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
 

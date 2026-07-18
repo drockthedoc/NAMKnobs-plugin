@@ -2,8 +2,11 @@
 
 #include <cmath> // std::round
 #include <cstdio> // FILE, fclose
+#include <cstdlib> // atoi
 #include <sstream> // std::stringstream
+#include <string> // std::string, std::to_string
 #include <unordered_map> // std::unordered_map
+#include <vector> // std::vector
 #include "IControls.h"
 #include "IPlugPaths.h"
 
@@ -119,6 +122,79 @@ public:
                {}, &mBlend);
     g.DrawCircle(COLOR_BLACK.WithOpacity(0.5f), data[1][0], data[1][1], 3, &mBlend);
   }
+};
+
+// NAMKnobs: invisible control that owns the layout of the dynamic per-model knobs. On kMsgTagModelControls it
+// shows exactly K knobs (evenly split across the tone-knob area), relabels them from the model's control names,
+// hides the unused slots, and toggles the analog EQ group (the EQ is shown only for a plain amp, i.e. K == 0).
+class ModelKnobArrangerControl : public IControl
+{
+public:
+  ModelKnobArrangerControl(const IRECT& knobsArea)
+  : IControl(IRECT())
+  , mKnobsArea(knobsArea)
+  {
+    mIgnoreMouse = true;
+  }
+
+  void Draw(IGraphics&) override {} // invisible; it exists only to receive messages and arrange other controls
+
+  void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
+  {
+    if (msgTag != kMsgTagModelControls || pData == nullptr)
+      return;
+    IGraphics* g = GetUI();
+    if (!g)
+      return;
+
+    // Payload: "K\nname0\nname1..." — K may exceed the number of names; any missing name defaults to "Knob n".
+    std::string payload(reinterpret_cast<const char*>(pData), dataSize > 0 ? (size_t)dataSize : 0u);
+    while (!payload.empty() && payload.back() == '\0')
+      payload.pop_back();
+    std::vector<std::string> lines;
+    std::stringstream ss(payload);
+    std::string line;
+    while (std::getline(ss, line, '\n'))
+      lines.push_back(line);
+    int K = lines.empty() ? 0 : atoi(lines[0].c_str());
+    if (K < 0)
+      K = 0;
+
+    const bool parametric = K > 0;
+    // Analog EQ (three tone knobs + the EQ toggle) is shown only for a plain amp.
+    g->ForControlInGroup("EQ_KNOBS", [parametric](IControl* pControl) {
+      if (pControl)
+        pControl->Hide(parametric);
+    });
+
+    const int shown = K < kNumModelKnobs ? K : kNumModelKnobs;
+    for (int k = 0; k < kNumModelKnobs; ++k)
+    {
+      IControl* knob = g->GetControlWithTag(kCtrlTagModelKnob0 + k);
+      if (!knob)
+        continue;
+      if (k < shown)
+      {
+        const IRECT cell = mKnobsArea.GetGridCell(0, k, 1, shown).GetPadded(-2.0f);
+        knob->SetTargetAndDrawRECTs(cell);
+        const int nameIdx = 1 + k; // lines[0] holds K
+        const std::string label = (nameIdx < (int)lines.size() && !lines[(size_t)nameIdx].empty())
+                                     ? lines[(size_t)nameIdx]
+                                     : (std::string("Knob ") + std::to_string(k + 1));
+        if (auto* vk = knob->As<IVKnobControl>())
+          vk->SetLabelStr(label.c_str());
+        knob->Hide(false);
+      }
+      else
+      {
+        knob->Hide(true);
+      }
+    }
+    g->SetAllControlsDirty();
+  }
+
+private:
+  IRECT mKnobsArea;
 };
 
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase

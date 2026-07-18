@@ -1,8 +1,13 @@
 #include <algorithm> // std::clamp, std::min
 #include <cmath> // pow
 #include <filesystem>
+#include <fstream> // std::ifstream (read model metadata for knob labels)
 #include <iostream>
+#include <string>
 #include <utility>
+#include <vector>
+
+#include "../NeuralAmpModelerCore/Dependencies/nlohmann/json.hpp" // read a model's metadata.controls for knob labels
 
 #include "Colors.h"
 #include "../NeuralAmpModelerCore/NAM/activations.h"
@@ -94,6 +99,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
   GetParam(kSlim)->InitDouble("Slim", 0.0, 0.0, 1.0, 0.01);
+  // NAMKnobs: dynamic per-model knob params. Host-visible names are generic ("Knob 1".."Knob 4"); the UI relabels
+  // and shows exactly the K a loaded model exposes. Range 0..10 (mapped to the model's trained 0..1 span).
+  for (int k = 0; k < kNumModelKnobs; ++k)
+  {
+    const std::string name = std::string("Knob ") + std::to_string(k + 1);
+    GetParam(kModelKnob0 + k)->InitDouble(name.c_str(), 5.0, 0.0, 10.0, 0.1);
+  }
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
@@ -157,6 +169,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetPadded(-singleKnobPad);
     const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetPadded(-singleKnobPad);
     const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
+    // NAMKnobs: the dynamic per-model knobs occupy the span of the three tone-knob cells; the arranger splits this
+    // into K cells at model-load time. (When a parametric model is loaded the analog EQ knobs here are hidden.)
+    const auto modelKnobsArea = IRECT(bassKnobArea.L, bassKnobArea.T, trebleKnobArea.R, trebleKnobArea.B);
 
     const auto ngToggleArea =
       noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
@@ -266,7 +281,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       kCtrlTagIRFileBrowser);
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
-    pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
+    // NAMKnobs: EQ toggle joins the "EQ_KNOBS" group so the arranger hides it together with the tone knobs when a
+    // parametric model is loaded.
+    pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap), -1,
+                             "EQ_KNOBS");
 
     // The knobs
     pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", style, knobBackgroundBitmap));
@@ -278,6 +296,20 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new NAMKnobControl(trebleKnobArea, kToneTreble, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
     pGraphics->AttachControl(new NAMKnobControl(outputKnobArea, kOutputLevel, "", style, knobBackgroundBitmap));
+
+    // NAMKnobs: the dynamic per-model knobs. Attached hidden and with a label-showing style; the arranger positions,
+    // relabels (from the model's control names), shows K of them, and hides the rest on model load. They live in the
+    // tone-knob span (the analog EQ knobs are hidden while a parametric model is loaded).
+    const IVStyle modelKnobStyle = style.WithShowLabel(true);
+    for (int k = 0; k < kNumModelKnobs; ++k)
+    {
+      const IRECT initCell = modelKnobsArea.GetGridCell(0, k, 1, kNumModelKnobs).GetPadded(-singleKnobPad);
+      pGraphics
+        ->AttachControl(new NAMKnobControl(initCell, kModelKnob0 + k, "", modelKnobStyle, knobBackgroundBitmap),
+                        kCtrlTagModelKnob0 + k)
+        ->Hide(true);
+    }
+    pGraphics->AttachControl(new ModelKnobArrangerControl(modelKnobsArea), kCtrlTagModelKnobArranger);
 
     // The meters
     pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
@@ -367,14 +399,13 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     const int K = mModel->NumControls();
     if (K > 0)
     {
-      // v1: first up to 3 knobs from the Bass/Middle/Treble params (0..10 -> 0..1); extras default to 0.5.
-      // v2 will add dedicated per-model knob params relabeled from the .nam metadata.
-      double controls[8];
-      static const int knobParam[3] = {kToneBass, kToneMid, kToneTreble};
-      const int n = K < 8 ? K : 8;
+      // Drive the model from the dedicated per-model knob params (kModelKnob0..). Each is 0..10 in the host and
+      // maps to the model's trained 0..1 span. Up to kNumModelKnobs are exposed; any beyond that stay at default.
+      double controls[kNumModelKnobs];
+      const int n = K < kNumModelKnobs ? K : kNumModelKnobs;
       for (int k = 0; k < n; ++k)
       {
-        double v = (k < 3) ? (GetParam(knobParam[k])->Value() / 10.0) : 0.5;
+        double v = GetParam(kModelKnob0 + k)->Value() / 10.0;
         controls[k] = v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
       }
       mModel->SetControls(controls, n);
@@ -516,6 +547,12 @@ void NeuralAmpModeler::OnUIOpen()
       SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
   }
 
+  // NAMKnobs: restore the dynamic knob count/labels for the currently-loaded model (the editor may have been closed
+  // and reopened, or state just restored). If nothing's loaded this sends "0" -> amp mode (EQ shown, knobs hidden).
+  if (mModelControlsMsg.GetLength())
+    SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, mModelControlsMsg.GetLength() + 1,
+                               mModelControlsMsg.Get());
+
   if (mIRPath.GetLength())
   {
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
@@ -571,7 +608,13 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
 {
   switch (msgTag)
   {
-    case kMsgTagClearModel: mShouldRemoveModel = true; return true;
+    case kMsgTagClearModel:
+      mShouldRemoveModel = true;
+      // NAMKnobs: model removed -> back to amp mode (show the analog EQ, hide the dynamic knobs).
+      mModelControlsMsg.Set("0");
+      mNumModelControls = 0;
+      SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, 2, "0");
+      return true;
     case kMsgTagClearIR: mShouldRemoveIR = true; return true;
     case kMsgTagHighlightColor:
     {
@@ -792,9 +835,44 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     {
       slimmable->SetSlimmableSize(GetParam(kSlim)->Value());
     }
+    const int numControls = temp->NumControls(); // NAMKnobs: K knob controls (0 = plain amp)
     mStagedModel = std::move(temp);
     mNAMPath = modelPath;
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
+
+    // NAMKnobs: read the model's control names (best-effort) from metadata.controls and tell the UI to show exactly
+    // K knobs with those labels. Cached in mModelControlsMsg so OnUIOpen can restore them if the editor reopens.
+    std::vector<std::string> controlNames;
+    try
+    {
+      std::ifstream f(dspPath);
+      if (f.good())
+      {
+        nlohmann::json j;
+        f >> j;
+        if (j.contains("metadata") && j["metadata"].contains("controls") && j["metadata"]["controls"].is_array())
+        {
+          for (auto& c : j["metadata"]["controls"])
+            if (c.is_string())
+              controlNames.push_back(c.get<std::string>());
+        }
+      }
+    }
+    catch (...)
+    {
+      controlNames.clear();
+    }
+    std::string msg = std::to_string(numControls);
+    for (int k = 0; k < numControls; ++k)
+    {
+      msg += "\n";
+      msg += (k < (int)controlNames.size() && !controlNames[(size_t)k].empty())
+               ? controlNames[(size_t)k]
+               : (std::string("Knob ") + std::to_string(k + 1));
+    }
+    mModelControlsMsg.Set(msg.c_str());
+    mNumModelControls = numControls;
+    SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
   }
   catch (std::runtime_error& e)
   {
