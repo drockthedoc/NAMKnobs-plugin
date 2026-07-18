@@ -41,7 +41,9 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   {
     std::string name = it.key();
     iplug::IParam* pParam = getParamByName(name);
-    if (pParam != nullptr)
+    // NAMKnobs: only apply numeric/bool values. A null or non-numeric value (e.g. left by a key rename on an old
+    // session) would throw when converted to double; skip it rather than crash the restore.
+    if (pParam != nullptr && (it->is_number() || it->is_boolean()))
     {
       pParam->Set(*it);
       iplug::Trace(TRACELOC, "%s %f", pParam->GetName(), pParam->Value());
