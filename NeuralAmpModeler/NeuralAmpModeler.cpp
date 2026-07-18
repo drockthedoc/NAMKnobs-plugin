@@ -337,7 +337,10 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   _ProcessInput(inputs, numFrames, numChannelsExternalIn, numChannelsInternal);
   _ApplyDSPStaging();
   const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
-  const bool toneStackActive = GetParam(kEQActive)->Value();
+  // NAMKnobs: when a parametric model is loaded, the Bass/Middle/Treble params drive the model's own knob
+  // controls, so the analog tonestack must be bypassed (otherwise it would double-process those params).
+  const bool modelIsParametric = (mModel != nullptr) && (mModel->NumControls() > 0);
+  const bool toneStackActive = GetParam(kEQActive)->Value() && !modelIsParametric;
 
   // Noise gate trigger
   sample** triggerOutput = mInputPointers;
@@ -357,37 +360,27 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
   if (mModel != nullptr)
   {
-    const int namInChans = mModel->NumInputChannels();
-    if (namInChans > 1)
+    // NAMKnobs parametric pedal: a model may expose K knob CONTROLS. We pass them as normalized (0..1) values;
+    // ResamplingNAM injects them as extra input channels at the model's internal rate (real-time-safe: the
+    // scratch buffers are preallocated in Reset, and this works at any host sample rate because the mono
+    // resampler only ever sees audio). A plain mono NAM amp reports 0 controls and this is a no-op.
+    const int K = mModel->NumControls();
+    if (K > 0)
     {
-      // NAMKnobs parametric pedal: feed [audio ; K knob channels]. Knob values come from plugin params
-      // (normalized 0..1), held constant over the block; channel 0 is the (gated) audio. (48k pass-through in
-      // ResamplingNAM preserves the extra channels; non-48k resampling of knob channels is a known v1 caveat.)
-      const int K = namInChans - 1;
-      if ((int)mKnobArray.size() < K)
-        mKnobArray.resize(K);
-      for (int k = 0; k < K; ++k)
-        if (mKnobArray[k].size() < numFrames)
-          mKnobArray[k].resize(numFrames);
-      mNAMInputPointers.resize((size_t)namInChans);
-      mNAMInputPointers[0] = triggerOutput[0];
       // v1: first up to 3 knobs from the Bass/Middle/Treble params (0..10 -> 0..1); extras default to 0.5.
       // v2 will add dedicated per-model knob params relabeled from the .nam metadata.
+      double controls[8];
       static const int knobParam[3] = {kToneBass, kToneMid, kToneTreble};
-      for (int k = 0; k < K; ++k)
+      const int n = K < 8 ? K : 8;
+      for (int k = 0; k < n; ++k)
       {
         double v = (k < 3) ? (GetParam(knobParam[k])->Value() / 10.0) : 0.5;
-        v = v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
-        for (size_t i = 0; i < numFrames; ++i)
-          mKnobArray[k][i] = (iplug::sample)v;
-        mNAMInputPointers[(size_t)(1 + k)] = mKnobArray[k].data();
+        controls[k] = v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
       }
-      mModel->process(mNAMInputPointers.data(), mOutputPointers, nFrames);
+      mModel->SetControls(controls, n);
     }
-    else
-    {
-      mModel->process(triggerOutput, mOutputPointers, nFrames);
-    }
+    // Always feed mono audio; control injection happens inside ResamplingNAM.
+    mModel->process(triggerOutput, mOutputPointers, nFrames);
   }
   else
   {
@@ -780,10 +773,12 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     auto dspPath = std::filesystem::u8path(modelPath.Get());
     std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath);
 
-    // Check that the model has 1 input and 1 output channel
-    if (model->NumInputChannels() != 1)
+    // NAMKnobs: accept 1 audio input channel, OR 1 audio + K knob-control channels (a parametric pedal model,
+    // in_channels = 1+K). ResamplingNAM keeps the external interface mono and injects the K controls internally.
+    if (model->NumInputChannels() < 1)
     {
-      throw std::runtime_error("Model must have 1 input channel, but has " + std::to_string(model->NumInputChannels()));
+      throw std::runtime_error("Model must have at least 1 input channel, but has "
+                               + std::to_string(model->NumInputChannels()));
     }
     if (model->NumOutputChannels() != 1)
     {

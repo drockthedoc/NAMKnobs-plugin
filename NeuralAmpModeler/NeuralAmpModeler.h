@@ -100,13 +100,33 @@ class ResamplingNAM : public nam::DSP
 public:
   // Resampling wrapper around the NAM models
   ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated, const double expected_sample_rate)
-  : nam::DSP(encapsulated->NumInputChannels(), encapsulated->NumOutputChannels(), expected_sample_rate)
+  : nam::DSP(1, encapsulated->NumOutputChannels(), expected_sample_rate) // EXTERNAL interface is mono (audio only)
   , mEncapsulated(std::move(encapsulated))
   , mResampler(GetNAMSampleRate(mEncapsulated))
   {
-    // Assign the encapsulated object's processing function  to this object's member so that the resampler can use it:
+    // NAMKnobs: a parametric pedal model takes extra input channels for its knob CONTROLS (in_channels = 1+K).
+    // We keep the external interface mono and inject the K control channels HERE, at the model's internal rate,
+    // inside the block-process callback. So the mono resampler only ever handles audio, and the (constant-per-
+    // block) controls reach the model correctly at ANY host sample rate (fixes the mono-resampler dropping them).
+    mNumControls = mEncapsulated->NumInputChannels() - 1;
+    if (mNumControls < 0)
+      mNumControls = 0;
     auto ProcessBlockFunc = [&](NAM_SAMPLE** input, NAM_SAMPLE** output, int numFrames) {
-      mEncapsulated->process(input, output, numFrames);
+      if (mNumControls <= 0)
+      {
+        mEncapsulated->process(input, output, numFrames);
+        return;
+      }
+      mMultiIn[0] = input[0];
+      for (int k = 0; k < mNumControls; ++k)
+      {
+        NAM_SAMPLE* ch = mControlChannels[(size_t)k].data();
+        const NAM_SAMPLE v = mControlValues[(size_t)k];
+        for (int i = 0; i < numFrames; ++i)
+          ch[i] = v;
+        mMultiIn[(size_t)(1 + k)] = ch;
+      }
+      mEncapsulated->process(mMultiIn.data(), output, numFrames);
     };
     mBlockProcessFunc = ProcessBlockFunc;
 
@@ -146,15 +166,25 @@ public:
 
     if (!NeedToResample())
     {
-      mEncapsulated->process(input, output, num_frames);
+      mBlockProcessFunc(input, output, num_frames); // injects controls at model rate (no resampling)
     }
     else
     {
-      mResampler.ProcessBlock(input, output, num_frames, mBlockProcessFunc);
+      mResampler.ProcessBlock(input, output, num_frames, mBlockProcessFunc); // audio resampled; controls injected in the callback
     }
   };
 
   int GetLatency() const { return NeedToResample() ? mResampler.GetLatency() : 0; };
+
+  // NAMKnobs: number of knob controls this model expects (0 for a plain mono NAM amp), and a real-time-safe
+  // setter for their current values (0..1). SetControls only copies into preallocated storage (no allocation).
+  int NumControls() const { return mNumControls; }
+  void SetControls(const double* vals, int n)
+  {
+    const int m = (n < mNumControls) ? n : mNumControls;
+    for (int k = 0; k < m; ++k)
+      mControlValues[(size_t)k] = (NAM_SAMPLE)vals[k];
+  }
 
   void Reset(const double sampleRate, const int maxBlockSize) override
   {
@@ -167,6 +197,18 @@ public:
     const double mUpRatio = sampleRate / GetEncapsulatedSampleRate();
     const auto maxEncapsulatedBlockSize = static_cast<int>(std::ceil(static_cast<double>(maxBlockSize) / mUpRatio));
     mEncapsulated->ResetAndPrewarm(sampleRate, maxEncapsulatedBlockSize);
+
+    // NAMKnobs: preallocate the control-channel scratch buffers here (off the audio thread). The block callback
+    // runs at the encapsulated model's rate, so each control channel must hold up to maxEncapsulatedBlockSize
+    // samples. Never resized on the audio thread.
+    if (mNumControls > 0)
+    {
+      mControlChannels.assign((size_t)mNumControls,
+                              std::vector<NAM_SAMPLE>((size_t)maxEncapsulatedBlockSize, (NAM_SAMPLE)0));
+      mMultiIn.assign((size_t)(mNumControls + 1), nullptr);
+      if ((int)mControlValues.size() != mNumControls)
+        mControlValues.assign((size_t)mNumControls, (NAM_SAMPLE)0.5);
+    }
   };
 
   // So that we can let the world know if we're resampling (useful for debugging)
@@ -191,6 +233,14 @@ private:
 
   // This function is defined to conform to the interface expected by the iPlug2 resampler.
   std::function<void(NAM_SAMPLE**, NAM_SAMPLE**, int)> mBlockProcessFunc;
+
+  // NAMKnobs control injection. mNumControls = encapsulated in_channels - 1. mControlValues holds the current
+  // (0..1) value of each control; mControlChannels are per-block constant-fill scratch buffers; mMultiIn is the
+  // [audio ; control...] pointer array handed to the encapsulated model. All sized in Reset (never on audio thread).
+  int mNumControls = 0;
+  std::vector<NAM_SAMPLE> mControlValues;
+  std::vector<std::vector<NAM_SAMPLE>> mControlChannels;
+  std::vector<NAM_SAMPLE*> mMultiIn;
 };
 
 class NeuralAmpModeler final : public iplug::Plugin
@@ -286,11 +336,8 @@ private:
   iplug::sample** mInputPointers = nullptr;
   iplug::sample** mOutputPointers = nullptr;
 
-  // NAMKnobs: parametric-pedal knob channels. A parametric .nam declares in_channels = 1+K; we feed the model
-  // [audio ; K knob channels] where each knob channel is a plugin param value (0..1) held constant per block.
-  // Empty/unused for a plain mono NAM amp (K==0), which keeps stock behaviour.
-  std::vector<std::vector<iplug::sample>> mKnobArray;
-  std::vector<iplug::sample*> mNAMInputPointers;
+  // NAMKnobs: parametric-pedal knob controls are now injected inside ResamplingNAM (see mModel->SetControls),
+  // so the plugin only ever hands the model mono audio. No per-block knob scratch buffers are needed here.
 
   // Input and output gain
   double mInputGain = 1.0;
