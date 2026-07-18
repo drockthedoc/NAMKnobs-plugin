@@ -221,9 +221,10 @@ private:
   IRECT mKnobsArea;
 };
 
-// NAMKnobs: a little stylized stompbox drawn with primitives (no external art -> no licensing issue), tinted in
-// the loaded pedal's accent color with its short name, footswitch, LED, and two knob dots. Shown only when a
-// parametric pedal is loaded. Driven by kMsgTagPedalIcon ("shortName\n#RRGGBB"; empty payload hides it).
+// NAMKnobs: a stylized stompbox drawn with primitives (no external art -> no licensing issue). The enclosure is
+// the real pedal's body color (metadata.body_color); graphics auto-contrast (white on dark bodies, black on light),
+// with corner screws, two knobs (pointer notch), a footswitch, an LED, and the short name. Round bodies (Fuzz Face)
+// are drawn circular. Driven by kMsgTagPedalIcon ("shortName\n#RRGGBB\n<round 0/1>"; empty payload hides it).
 class PedalIconControl : public IControl
 {
 public:
@@ -238,24 +239,51 @@ public:
   {
     if (mName.empty())
       return;
-    const IRECT body = mRECT.GetPadded(-1.5f);
-    // enclosure
-    g.FillRoundRect(IColor(255, 38, 38, 42), body, 5.f);
-    g.DrawRoundRect(mAccent, body, 5.f, &mBlend, 1.5f);
-    // two knob dots up top
-    const IRECT top = body.GetFromTop(body.H() * 0.22f);
-    g.FillCircle(mAccent, top.MW() - body.W() * 0.16f, top.MH() + 2.f, 2.6f);
-    g.FillCircle(mAccent, top.MW() + body.W() * 0.16f, top.MH() + 2.f, 2.6f);
+    const float lum = 0.299f * mBody.R + 0.587f * mBody.G + 0.114f * mBody.B;
+    const IColor fg = (lum > 150.f) ? IColor(255, 20, 20, 20) : IColor(255, 238, 238, 238);
+    const IColor line = fg.WithOpacity(0.55f);
+    const IRECT b = mRECT.GetPadded(-1.f);
+
+    if (mRound)
+    {
+      const float rad = ((b.W() < b.H() ? b.W() : b.H()) * 0.5f) - 1.f;
+      const float cx = b.MW(), cy = b.MH();
+      g.FillCircle(mBody, cx, cy, rad);
+      g.DrawCircle(line, cx, cy, rad, &mBlend, 1.2f);
+      for (int i = -1; i <= 1; ++i)
+        g.FillCircle(fg, cx + i * rad * 0.45f, cy - rad * 0.42f, rad * 0.12f);
+      g.FillCircle(fg.WithOpacity(0.9f), cx, cy + rad * 0.34f, rad * 0.22f); // footswitch
+      IText t(7.5f, fg, nullptr, EAlign::Center, EVAlign::Middle);
+      g.DrawText(t, mName.c_str(), IRECT(cx - rad, cy - rad * 0.08f, cx + rad, cy + rad * 0.16f));
+      return;
+    }
+
+    // rectangular enclosure
+    g.FillRoundRect(mBody, b, 4.f);
+    g.DrawRoundRect(line, b, 4.f, &mBlend, 1.f);
+    // corner screws
+    const float m = 4.f;
+    g.FillCircle(line, b.L + m, b.T + m, 1.5f);
+    g.FillCircle(line, b.R - m, b.T + m, 1.5f);
+    g.FillCircle(line, b.L + m, b.B - m, 1.5f);
+    g.FillCircle(line, b.R - m, b.B - m, 1.5f);
+    // two knobs near the top, each with a pointer notch
+    const float ky = b.T + b.H() * 0.17f, kr = b.W() * 0.12f;
+    for (int i = 0; i < 2; ++i)
+    {
+      const float kx = b.MW() + (i == 0 ? -1.f : 1.f) * b.W() * 0.21f;
+      g.FillCircle(fg, kx, ky, kr);
+      g.DrawLine(mBody, kx, ky, kx, ky - kr + 1.f, &mBlend, 1.2f);
+    }
     // LED
-    g.FillCircle(mAccent, body.R - 6.f, body.T + 6.f, 2.2f);
+    g.FillCircle(fg, b.MW(), b.T + b.H() * 0.36f, 1.8f);
     // name plate in the middle
-    IRECT nameR = body.GetMidVPadded(body.H() * 0.16f).GetHPadded(-2.f);
-    IText t(8.5f, COLOR_WHITE, nullptr, EAlign::Center, EVAlign::Middle);
-    g.DrawText(t, mName.c_str(), nameR);
-    // footswitch at the bottom
-    const IRECT bot = body.GetFromBottom(body.H() * 0.30f);
-    g.FillCircle(IColor(255, 70, 70, 74), bot.MW(), bot.MH(), 7.f);
-    g.DrawCircle(mAccent, bot.MW(), bot.MH(), 7.f, &mBlend, 1.2f);
+    IText t(8.f, fg, nullptr, EAlign::Center, EVAlign::Middle);
+    g.DrawText(t, mName.c_str(), b.GetMidVPadded(b.H() * 0.13f).GetHPadded(-2.f));
+    // footswitch near the bottom
+    const float fy = b.B - b.H() * 0.19f, fr = b.W() * 0.17f;
+    g.FillCircle(fg.WithOpacity(0.92f), b.MW(), fy, fr);
+    g.DrawCircle(mBody, b.MW(), fy, fr, &mBlend, 1.f);
   }
 
   void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
@@ -265,20 +293,24 @@ public:
     std::string s(reinterpret_cast<const char*>(pData), dataSize > 0 ? (size_t)dataSize : 0u);
     while (!s.empty() && s.back() == '\0')
       s.pop_back();
-    const size_t nl = s.find('\n');
-    mName = (nl == std::string::npos) ? s : s.substr(0, nl);
-    std::string col = (nl == std::string::npos) ? std::string() : s.substr(nl + 1);
-    if (col.size() >= 7 && col[0] == '#')
-      mAccent = IColor::FromColorCode((int)strtol(col.substr(1, 6).c_str(), nullptr, 16));
-    else
-      mAccent = COLOR_WHITE;
+    std::vector<std::string> lines;
+    std::stringstream ss(s);
+    std::string ln;
+    while (std::getline(ss, ln, '\n'))
+      lines.push_back(ln);
+    mName = lines.empty() ? std::string() : lines[0];
+    mBody = IColor(255, 40, 40, 44);
+    if (lines.size() > 1 && lines[1].size() >= 7 && lines[1][0] == '#')
+      mBody = IColor::FromColorCode((int)strtol(lines[1].substr(1, 6).c_str(), nullptr, 16));
+    mRound = (lines.size() > 2 && !lines[2].empty() && lines[2][0] == '1');
     Hide(mName.empty());
     SetDirty(false);
   }
 
 private:
   std::string mName;
-  IColor mAccent = COLOR_WHITE;
+  IColor mBody = IColor(255, 40, 40, 44);
+  bool mRound = false;
 };
 
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase

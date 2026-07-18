@@ -155,8 +155,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto contentArea = mainArea.GetPadded(-10);
     const auto titleHeight = 50.0f;
     const auto titleArea = contentArea.GetFromTop(titleHeight);
-    // NAMKnobs: little stylized-pedal icon tucked into the bottom-right blank space.
-    const auto pedalIconArea = IRECT(contentArea.R - 52.f, contentArea.B - 72.f, contentArea.R - 4.f, contentArea.B - 6.f);
 
     // Areas for knobs
     const auto knobsPad = 20.0f;
@@ -191,6 +189,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
+    // NAMKnobs: center the little pedal icon in the bottom-right blank space (right of the file rows, with margin).
+    const auto pedalIconSpace = IRECT(modelArea.R + 8.f, modelArea.T - 2.f, contentArea.R, irArea.B + 2.f);
+    const auto pedalIconArea = pedalIconSpace.GetCentredInside(46.f, 62.f);
 
     // Areas for meters
     const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
@@ -623,14 +624,19 @@ void NeuralAmpModeler::OnUIOpen()
             msg += "\n" + names[(size_t)k];
           SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
           // pedal icon
-          std::string shortName;
+          std::string shortName, bodyColor;
+          bool roundPedal = false;
           if (md.contains("short_name") && md["short_name"].is_string())
             shortName = md["short_name"].get<std::string>();
           else if (md.contains("pedal") && md["pedal"].is_string())
             shortName = md["pedal"].get<std::string>();
+          if (md.contains("body_color") && md["body_color"].is_string())
+            bodyColor = md["body_color"].get<std::string>();
+          if (md.contains("round_pedal") && md["round_pedal"].is_boolean())
+            roundPedal = md["round_pedal"].get<bool>();
           if (displayed > 0 && !shortName.empty())
           {
-            std::string iconMsg = shortName + "\n" + knobColor;
+            std::string iconMsg = shortName + "\n" + (bodyColor.empty() ? knobColor : bodyColor) + "\n" + (roundPedal ? "1" : "0");
             SendControlMsgFromDelegate(kCtrlTagPedalIcon, kMsgTagPedalIcon, (int)iconMsg.size() + 1, iconMsg.c_str());
           }
         }
@@ -928,6 +934,8 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     std::string levelName;
     std::string knobColor; // NAMKnobs: per-pedal accent color for the model knobs (metadata.knob_color, "#RRGGBB")
     std::string shortName; // NAMKnobs: short pedal name for the stylized pedal icon (metadata.short_name)
+    std::string bodyColor; // NAMKnobs: pedal enclosure color for the icon (metadata.body_color)
+    bool roundPedal = false; // NAMKnobs: circular pedal (Fuzz Face) (metadata.round_pedal)
     bool hasLevel = false;
     double levelReference = 1.0;
     try
@@ -944,6 +952,10 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
           shortName = md["short_name"].get<std::string>();
         else if (md.contains("pedal") && md["pedal"].is_string())
           shortName = md["pedal"].get<std::string>();
+        if (md.contains("body_color") && md["body_color"].is_string())
+          bodyColor = md["body_color"].get<std::string>();
+        if (md.contains("round_pedal") && md["round_pedal"].is_boolean())
+          roundPedal = md["round_pedal"].get<bool>();
         if (j.contains("metadata") && md.contains("controls") && md["controls"].is_array())
         {
           for (auto& c : md["controls"])
@@ -1000,7 +1012,10 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
     // NAMKnobs: drive the little stylized pedal icon ("shortName\n#color"). Only for a parametric pedal (K>0);
     // a plain amp sends an empty payload -> the icon hides. Cached for OnUIOpen.
-    std::string iconMsg = (numControls > 0 && !shortName.empty()) ? (shortName + "\n" + knobColor) : std::string();
+    const std::string iconBody = !bodyColor.empty() ? bodyColor : knobColor;
+    std::string iconMsg = (numControls > 0 && !shortName.empty())
+                            ? (shortName + "\n" + iconBody + "\n" + (roundPedal ? "1" : "0"))
+                            : std::string();
     mPedalIconMsg.Set(iconMsg.c_str());
     SendControlMsgFromDelegate(kCtrlTagPedalIcon, kMsgTagPedalIcon, (int)iconMsg.size() + 1, iconMsg.c_str());
   }
