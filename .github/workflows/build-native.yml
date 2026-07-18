@@ -224,9 +224,13 @@ jobs:
       - name: Pluginval (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          curl -L "https://github.com/Tracktion/pluginval/releases/download/latest_release/pluginval_macOS.zip" -o pluginval.zip
-          unzip pluginval
-          PV="pluginval.app/Contents/MacOS/pluginval"
+          # Pin to a CURRENT pluginval (v1.0.4, 2024). The workflow inherited "latest_release" from stock NAM, but
+          # that tag is a stale 2020 rolling build (pluginval v0.2.7 / JUCE 5.4.7) that flakily segfaults on the
+          # "Open plugin (warm)" test of a modern plugin -- the source of the intermittent CI red.
+          curl -L "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip" -o pluginval.zip
+          unzip -q pluginval.zip
+          PV="pluginval.app/Contents/MacOS/pluginval"; [ -x "$PV" ] || PV="./pluginval"; [ -x "$PV" ] || PV="$(find . -type f -name pluginval | head -1)"
+          echo "using pluginval at: $PV"; "$PV" --version || true
           mkdir -p ~/Library/Audio/Plug-Ins/Components
           mv NAMKnobs.component ~/Library/Audio/Plug-Ins/Components
           validate() { "$PV" --skip-gui-tests --validate-in-process --output-dir "./bin" --validate "$1"; }
@@ -239,8 +243,11 @@ jobs:
       - name: Pluginval (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/latest_release/pluginval_Windows.zip -OutFile pluginval.zip"
-          powershell -Command "Expand-Archive pluginval.zip -DestinationPath ."
+          # Pin to current pluginval v1.0.4 (see the macOS step: "latest_release" is a stale 2020 build that
+          # flaky-crashes on warm-open).
+          powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip"
+          powershell -Command "Expand-Archive -Force pluginval.zip -DestinationPath ."
+          ls -la
           ok=0
           for i in 1 2 3; do
             echo "== pluginval attempt $i =="
