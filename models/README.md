@@ -17,24 +17,18 @@ circuits and are not affiliated with or endorsed by the original manufacturers.
 | MXR Distortion+ | `NAMKnobs_MXR_DistortionPlus.nam` | Distortion |
 | Boss DS-1 | `NAMKnobs_BossDS1.nam` | Dist, Tone |
 | Fuzz Face | `NAMKnobs_FuzzFace.nam` | Fuzz |
-| Compressor (beta) | `NAMKnobs_Compressor.nam` | Threshold, Ratio, Attack, Release |
+| Compressor | `NAMKnobs_Compressor.nam` | Threshold, Ratio, Attack, Release |
 
-## How the knobs map today
+## How the knobs work
 
-In this build the model's knobs are driven by the plugin's existing tone controls, in order:
+When you load one of these models the plugin shows **exactly the right knobs for that pedal**, labelled with the
+real control names read from the model — the RAT shows *Distortion* and *Filter*, the MXR shows a single
+*Distortion*, the Compressor shows *Threshold / Ratio / Attack / Release*. Unused knob slots and the plugin's
+analog tone stack are hidden while a pedal is loaded (the knobs feed the model, not an EQ). Each knob's 0–10 range
+maps to the model's trained 0–1 span, and motion is smoothed (~5 ms) so turns and automation are click-free.
 
-- **Bass knob → knob 1**
-- **Middle knob → knob 2**
-- **Treble knob → knob 3**
-
-So for the RAT: **Bass = Distortion**, **Middle = Filter**. For a one-knob pedal (MXR, Fuzz Face) only **Bass**
-is live. Each knob's range 0–10 maps to the model's trained 0–1 span; motion is smoothed (~5 ms) so turns and
-automation are click-free. When one of these models is loaded, the plugin's analog tone stack is bypassed
-automatically (the knobs feed the model, not an EQ).
-
-> **Compressor is beta**: it has four knobs, but this build only exposes three tone controls, so **Release** is
-> currently fixed at its midpoint. Dedicated, correctly-labelled per-model knobs (showing *Distortion/Filter*,
-> *Threshold/Ratio/Attack/Release*, etc. instead of *Bass/Middle/Treble*) are the next feature.
+Every knob on every model here is verified in CI to be individually wired and effective (see the verification note
+below) — including all four of the Compressor's knobs.
 
 ## Verification
 

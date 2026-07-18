@@ -30,10 +30,10 @@ The build is unsigned; on macOS you may need to right-click → Open once, or cl
 
 1. Insert NAMKnobs on a guitar track **before** your NAM amp instance.
 2. Click the model browser and load one of the `models/NAMKnobs_*.nam` pedals.
-3. Turn the knobs. In this build the pedal's knobs are driven by the tone controls in order —
-   **Bass = knob 1, Middle = knob 2, Treble = knob 3** (e.g. for the RAT, Bass = Distortion, Middle = Filter).
-   See `models/README.md` for each pedal's knob list. Knob motion is smoothed (~5 ms) so it's click-free, and the
-   analog tone stack is bypassed automatically while a parametric model is loaded.
+3. Turn the knobs. The plugin shows **exactly the right knobs for that pedal**, labelled with the real control
+   names (RAT → *Distortion, Filter*; MXR → *Distortion*; Compressor → *Threshold/Ratio/Attack/Release*). Unused
+   knob slots and the analog tone stack are hidden while a pedal is loaded. Knob motion is smoothed (~5 ms) so
+   it's click-free.
 4. Stack more instances before the amp as you like.
 
 ## Stacking before NAM
@@ -46,9 +46,10 @@ Guitar → NAMKnobs (RAT) → NAMKnobs (Tube Screamer) → NAM (amp) → cab/IR
 
 ## Notes / current limits
 
-- Models with more than three knobs (the **Compressor**, 4 knobs) can't yet reach every knob from the three tone
-  controls — its **Release** is fixed at midpoint. Dedicated, correctly-labelled per-model knobs are the next
-  feature.
+- The plugin binary is still named `NeuralAmpModeler` (same as stock NAM) and shares its plugin ID, so installing
+  it **replaces / conflicts with** a stock NAM install. Use a dedicated plugin folder or a test DAW if you want
+  both. A proper rename + unique ID is a planned follow-up.
+- Up to 4 knobs per model are shown (our largest, the Compressor, has exactly 4). All four Compressor knobs work.
 - Works at any host sample rate (44.1/48/88.2/96 kHz): audio is resampled to the model rate and the knob controls
   are injected at model rate, so they're never dropped.
 
