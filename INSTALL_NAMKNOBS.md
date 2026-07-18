@@ -9,8 +9,8 @@ NAM amp and **stacks** with other instances (pedal → pedal → amp).
 Grab the release archive for your OS from the repo's **Releases** page. Each contains the plugin(s) plus the
 `models/` folder of NAMKnobs pedal models.
 
-- **macOS**: `NeuralAmpModeler.vst3` and `NeuralAmpModeler.component` (AU)
-- **Windows**: `NeuralAmpModeler.vst3`
+- **macOS**: `NAMKnobs.vst3` and `NAMKnobs.component` (AU)
+- **Windows**: `NAMKnobs.vst3`
 
 ## Install
 
@@ -46,10 +46,11 @@ Guitar → NAMKnobs (RAT) → NAMKnobs (Tube Screamer) → NAM (amp) → cab/IR
 
 ## Notes / current limits
 
-- In a DAW this shows up as **NAMKnobs** with its own unique plugin ID, so hosts treat it as a distinct plugin
-  from stock NAM. **However**, the bundle *filename* on disk is still `NeuralAmpModeler.vst3` / `.component`, so
-  installing it to a shared plugin folder overwrites stock NAM's file. Until the on-disk rename lands
-  (see `RENAME_PLAN.md`), use a dedicated plugin folder if you want to keep both.
+- This installs as **`NAMKnobs.vst3` / `.component`** with its own unique VST3/AU IDs and shows up as **NAMKnobs**
+  in the DAW, so it **coexists with a stock NAM install** — distinct filename, distinct plugin ID, no overwrite.
+- Caveat (macOS, edge case): NAMKnobs and stock NAM still share an internal Objective-C symbol prefix, so loading
+  *both at once in the same host* could in theory clash. Using either alone, or on separate tracks, is fine. The
+  clean fix (a distinct compile-time prefix, needs a local build) is noted in `RENAME_PLAN.md`.
 - Up to 4 knobs per model are shown (our largest, the Compressor, has exactly 4). All four Compressor knobs work.
 - Works at any host sample rate (44.1/48/88.2/96 kHz): audio is resampled to the model rate and the knob controls
   are injected at model rate, so they're never dropped.
