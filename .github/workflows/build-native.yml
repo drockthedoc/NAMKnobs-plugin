@@ -9,6 +9,26 @@ env:
   PROJECT_NAME: NeuralAmpModeler
 
 jobs:
+  verify-parametric:
+    name: Verify parametric control contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure + build verify_parametric
+        run: |
+          cmake -S ci -B ci/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build ci/build --config Release -j
+        shell: bash
+
+      - name: Assert bundled parametric model honours the [audio ; K controls] contract
+        run: |
+          ci/build/verify_parametric ci/models/rat_parametric.nam
+        shell: bash
+
   build:
     name: Build-native-plugins
     runs-on: ${{matrix.os}}
