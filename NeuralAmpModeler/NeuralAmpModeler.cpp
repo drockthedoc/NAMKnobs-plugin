@@ -608,8 +608,13 @@ void NeuralAmpModeler::OnUIOpen()
               ln[0] = (char)std::toupper((unsigned char)ln[0]);
             names.push_back(ln);
           }
+          std::string knobColor;
+          if (md.contains("knob_color") && md["knob_color"].is_string())
+            knobColor = md["knob_color"].get<std::string>();
           const int displayed = std::min((int)names.size(), kNumModelKnobs);
           std::string msg = std::to_string(displayed);
+          if (!knobColor.empty())
+            msg += " " + knobColor;
           for (int k = 0; k < displayed; ++k)
             msg += "\n" + names[(size_t)k];
           SendControlMsgFromDelegate(kCtrlTagModelKnobArranger, kMsgTagModelControls, (int)msg.size() + 1, msg.c_str());
@@ -904,6 +909,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     // OnUIOpen can restore it. mStagedHasLevel/mStagedLevelReference are applied when the model goes live (staging).
     std::vector<std::string> controlNames;
     std::string levelName;
+    std::string knobColor; // NAMKnobs: per-pedal accent color for the model knobs (metadata.knob_color, "#RRGGBB")
     bool hasLevel = false;
     double levelReference = 1.0;
     try
@@ -914,6 +920,8 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
         nlohmann::json j;
         f >> j;
         const auto& md = j["metadata"];
+        if (md.contains("knob_color") && md["knob_color"].is_string())
+          knobColor = md["knob_color"].get<std::string>();
         if (j.contains("metadata") && md.contains("controls") && md["controls"].is_array())
         {
           for (auto& c : md["controls"])
@@ -943,7 +951,10 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     }
     // Guard the display slot count: net controls + optional level, capped at the available knob slots.
     const int displayed = std::min(numControls + (hasLevel ? 1 : 0), kNumModelKnobs);
+    // First payload line is "<K>[ #RRGGBB]" -- the optional accent color tints the pedal's knobs.
     std::string msg = std::to_string(displayed);
+    if (!knobColor.empty())
+      msg += " " + knobColor;
     for (int k = 0; k < displayed; ++k)
     {
       msg += "\n";

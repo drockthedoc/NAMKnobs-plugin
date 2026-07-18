@@ -161,6 +161,20 @@ public:
     if (K < 0)
       K = 0;
 
+    // Optional per-pedal accent color on line 0: "<K> #RRGGBB". Tints the model knobs so they visibly belong to
+    // the pedal (kX1 = the knob's value arc + pointer color).
+    IColor accent;
+    bool hasColor = false;
+    if (!lines.empty())
+    {
+      const size_t h = lines[0].find('#');
+      if (h != std::string::npos && h + 7 <= lines[0].size())
+      {
+        accent = IColor::FromColorCode((int)strtol(lines[0].substr(h + 1, 6).c_str(), nullptr, 16));
+        hasColor = true;
+      }
+    }
+
     const bool parametric = K > 0;
     // Analog EQ (three tone knobs + the EQ toggle) is shown only for a plain amp.
     g->ForControlInGroup("EQ_KNOBS", [parametric](IControl* pControl) {
@@ -185,7 +199,14 @@ public:
         if (!label.empty()) // Title-case the first letter so labels read uniformly (e.g. "distortion" -> "Distortion")
           label[0] = (char)std::toupper((unsigned char)label[0]);
         if (auto* vk = knob->As<IVKnobControl>())
+        {
           vk->SetLabelStr(label.c_str());
+          if (hasColor)
+          {
+            vk->SetColor(kX1, accent); // value arc + pointer
+            vk->SetColor(kX3, accent); // hover
+          }
+        }
         knob->Hide(false);
       }
       else
