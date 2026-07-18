@@ -24,5 +24,15 @@ for m in models/NAMKnobs_*.nam; do ci/build/verify_parametric "$m"; done
 
 Exit 0 = pass; any non-zero = fail.
 
-> Scope: this exercises the model-boundary control contract. It does **not** cover `ResamplingNAM`'s resampling
-> behaviour at non-model host rates (44.1/88.2/96 kHz) — that lives inside iPlug2 and is a separate gate.
+## Multi-rate control survival (`verify_resample.cpp`)
+
+`verify_resample.cpp` closes the non-48 kHz gate. It mirrors `ResamplingNAM`'s **exact** runtime path — a mono
+`dsp::ResamplingContainer<NAM_SAMPLE,1,12>` at the model's rate, with the K control channels injected inside the
+block callback — and runs each model at **44.1 / 48 / 88.2 / 96 kHz**. At each rate it sweeps control 0 (low vs
+high) and requires a finite, measurable delta. If resampling dropped the control channels, low and high would be
+identical (`relDiff ≈ 0`) and it fails. In practice `relDiff` is essentially identical across all four rates
+(e.g. RAT 0.7734 at every rate), so controls survive resampling exactly. The `verify-parametric` CI job runs it
+over every bundled model alongside the per-control contract check.
+
+> Both tests exercise the model + resampling boundary the plugin relies on, without iPlug2. They do not replace a
+> DAW listen — the visual knob layout still wants a human eye.

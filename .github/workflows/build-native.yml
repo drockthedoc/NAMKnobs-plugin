@@ -38,6 +38,16 @@ jobs:
           echo "Verified $count bundled models."
         shell: bash
 
+      - name: Assert controls survive host-rate resampling (44.1/48/88.2/96 kHz)
+        run: |
+          set -e
+          shopt -s nullglob
+          for m in models/NAMKnobs_*.nam; do
+            echo "--- $m ---"
+            ci/build/verify_resample "$m"
+          done
+        shell: bash
+
   build:
     name: Build-native-plugins
     runs-on: ${{matrix.os}}

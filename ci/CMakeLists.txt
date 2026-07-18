@@ -15,6 +15,8 @@ if(NOT EXISTS "${CORE}/NAM/get_dsp.h")
   message(FATAL_ERROR "NeuralAmpModelerCore submodule not found at ${CORE} (checkout with --recursive)")
 endif()
 
+set(ADSP "${CMAKE_CURRENT_SOURCE_DIR}/../AudioDSPTools")
+
 file(GLOB NAM_SOURCES "${CORE}/NAM/*.cpp" "${CORE}/NAM/*/*.cpp")
 
 add_executable(verify_parametric verify_parametric.cpp ${NAM_SOURCES})
@@ -24,6 +26,18 @@ target_include_directories(verify_parametric PRIVATE
   "${CORE}/Dependencies/eigen"
   "${CORE}/Dependencies/nlohmann")
 
+# Multi-rate control-survival test. Uses AudioDSPTools' ResamplingContainer (the same one ResamplingNAM wraps),
+# so it needs the AudioDSPTools include paths in addition to the core's.
+add_executable(verify_resample verify_resample.cpp ${NAM_SOURCES})
+target_include_directories(verify_resample PRIVATE
+  "${CORE}"
+  "${CORE}/Dependencies"
+  "${CORE}/Dependencies/eigen"
+  "${CORE}/Dependencies/nlohmann"
+  "${ADSP}/dsp"
+  "${ADSP}/dsp/ResamplingContainer")
+
 if(MSVC)
   target_compile_definitions(verify_parametric PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
+  target_compile_definitions(verify_resample PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES)
 endif()
