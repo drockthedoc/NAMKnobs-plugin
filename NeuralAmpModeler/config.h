@@ -4,8 +4,8 @@
 // read the version and the bundle name, and a comment mentioning one would corrupt that parse.
 #define PLUG_NAME "NAMKnobs"
 #define PLUG_MFR "NAMKnobs"
-#define PLUG_VERSION_HEX 0x0000070f
-#define PLUG_VERSION_STR "0.7.15"
+#define PLUG_VERSION_HEX 0x00000100
+#define PLUG_VERSION_STR "0.1.0"
 #define PLUG_UNIQUE_ID 'NKb1'
 #define PLUG_MFR_ID 'NKnb'
 #define PLUG_URL_STR "https://github.com/drockthedoc/NAMKnobs-plugin"
