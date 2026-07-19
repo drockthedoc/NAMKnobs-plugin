@@ -130,7 +130,10 @@ jobs:
       shell: bash
 
     # NAMKnobs: best-effort GUI screenshot so the dynamic-knob layout isn't a blind spot. Launches the standalone
-    # app with NAMKNOBS_SCREENSHOT_MODEL so it shows a pedal's knobs, then screencaptures. Never fails the build.
+    # app with NAMKNOBS_SCREENSHOT_MODEL so it shows a pedal's knobs, then captures ITS WINDOW LAYER (not the whole
+    # screen). macOS pops a screen-recording permission dialog after the first capture; a full-screen grab catches
+    # that dialog over the knobs, but `screencapture -l<windowid>` grabs only the plugin window's composited image,
+    # so the dialog (owned by another process) is excluded and every pedal comes out clean. Never fails the build.
     - name: GUI screenshots (macOS, best-effort)
       if: matrix.os == 'macOS-latest'
       continue-on-error: true
@@ -141,19 +144,35 @@ jobs:
         cd "$OUT"; rm -rf _shot; mkdir _shot; (cd _shot && unzip -q ../NAMKnobs-mac.zip)
         APP="$OUT/_shot/NAMKnobs.app/Contents/MacOS/NAMKnobs"
         chmod +x "$APP" 2>/dev/null
+        # Compile the window-id helper (best-effort; fall back to full-screen capture if it doesn't build).
+        WINID=""
+        if swiftc -O "$GITHUB_WORKSPACE/ci/winid.swift" -o "$PWD/winid" 2>/tmp/swiftc.log; then
+          WINID="$PWD/winid"; echo "built winid helper"
+        else
+          echo "swiftc failed; will use full-screen capture:"; tail -5 /tmp/swiftc.log
+        fi
         shoot() {
           local model="$1" name="$2"
           echo "== $name : $model =="
           NAMKNOBS_SCREENSHOT_MODEL="$model" "$APP" >"/tmp/$name.log" 2>&1 &
           local pid=$!
           sleep 14
-          screencapture -x "$SHOTS/$name.png" 2>&1 || echo "screencapture failed for $name"
+          local wid=""
+          [ -n "$WINID" ] && [ -x "$WINID" ] && wid="$("$WINID" 2>/dev/null | tr -dc '0-9')"
+          if [ -n "$wid" ] && [ "$wid" != "0" ]; then
+            echo "capturing window layer id=$wid"
+            screencapture -x -o -l"$wid" "$SHOTS/$name.png" 2>&1 || echo "windowid capture failed for $name"
+          fi
+          # Fall back to full-screen if the window-layer capture produced nothing usable.
+          if [ ! -s "$SHOTS/$name.png" ] || [ "$(stat -f%z "$SHOTS/$name.png" 2>/dev/null || echo 0)" -lt 5000 ]; then
+            echo "falling back to full-screen capture for $name"
+            screencapture -x "$SHOTS/$name.png" 2>&1 || echo "screencapture failed for $name"
+          fi
           kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
           sleep 2
           echo "--- $name app log ---"; tail -20 "/tmp/$name.log" 2>/dev/null
         }
-        # macOS pops a screen-recording permission dialog after the first capture, so capture the tightest layout
-        # (the 4-knob compressor) first while the screen is clean; the others may show the dialog overlay.
+        # Window-layer capture makes order irrelevant (the permission dialog is never in the shot).
         shoot "$GITHUB_WORKSPACE/models/NAMKnobs_FuzzFace.nam" "1_fuzz_round"
         shoot "$GITHUB_WORKSPACE/models/NAMKnobs_BossDS1.nam" "2_ds1_orange"
         shoot "$GITHUB_WORKSPACE/models/NAMKnobs_RAT.nam" "3_rat_black"
